@@ -13,28 +13,40 @@
   --color-brand-green: #388e3c;
   --color-brand-green-glow: rgba(56, 142, 60, 0.08);
   
-  --color-bg-light-gray: #f6f8fa;
-  --color-border-light-gray: #e1e4e8;
+  --color-bg-light-gray: #f8f9fa;
+  --color-border-light-gray: #e9ecef;
   
-  --color-text-slate-dark: #24292f;
-  --color-text-slate-medium: #57606a;
-  --color-text-slate-light: #8c959f;
+  --color-text-slate-dark: #1a1d20;
+  --color-text-slate-medium: #495057;
+  --color-text-slate-light: #adb5bd;
+
+  --animate-fade-in: fade-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-slide-in: slide-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slide-in {
+    from { transform: translateY(8px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
 }
 
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #f6f8fa;
+  background: #f8f9fa;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d1d5da;
-  border-radius: 4px;
+  background: #dee2e6;
+  border-radius: 8px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #959da5;
+  background: #ced4da;
 }
 
 body {
@@ -48,18 +60,117 @@ body {
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
+  letter-spacing: -0.01em;
 }
 
-/* Reusable Glassmorphism/Flat Card */
+/* Reusable Glassmorphism / Premium Flat Card */
 .glass-card {
-  background-color: #ffffff;
-  border: 1px solid var(--color-border-light-gray);
-  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(233, 236, 239, 0.8);
+  border-radius: 12px;
   padding: 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.04);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.02), 0 2px 8px -1px rgba(0, 0, 0, 0.02);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-card:hover {
-  border-color: #d1d5da;
+  border-color: rgba(206, 212, 218, 0.8);
+  box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.05), 0 4px 12px -2px rgba(0, 0, 0, 0.03);
 }
+
+/* Button & Input Design System */
+.btn-primary {
+  background-color: var(--color-brand-orange);
+  color: white;
+  padding: 0.55rem 1.35rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: none;
+  box-shadow: 0 2px 4px rgba(242, 92, 5, 0.15);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--color-brand-orange-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(242, 92, 5, 0.25);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-primary:disabled {
+  background-color: var(--color-border-light-gray);
+  color: var(--color-text-slate-light);
+  cursor: not-allowed;
+  opacity: 0.6;
+  box-shadow: none;
+}
+
+.btn-secondary {
+  background-color: white;
+  color: var(--color-text-slate-medium);
+  padding: 0.55rem 1.35rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 1px solid var(--color-border-light-gray);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--color-bg-light-gray);
+  color: var(--color-text-slate-dark);
+  border-color: #ced4da;
+  transform: translateY(-1px);
+}
+
+.btn-secondary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-secondary:disabled {
+  color: var(--color-text-slate-light);
+  cursor: not-allowed;
+  opacity: 0.6;
+  box-shadow: none;
+}
+
+.input-field {
+  border: 1px solid var(--color-border-light-gray);
+  background-color: white;
+  border-radius: 0.5rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input-field:focus {
+  border-color: var(--color-brand-orange);
+  box-shadow: 0 0 0 3px var(--color-brand-orange-glow);
+  outline: none;
+}
+
+/* Custom premium hover and animation effects */
+.hover-lift {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.08);
+}
+
+

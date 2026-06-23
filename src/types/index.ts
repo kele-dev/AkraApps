@@ -4,6 +4,8 @@ export interface User {
   displayName: string;
   avatar: string;
   bio: string;
+  website?: string;
+  gender?: string;
 }
 
 export interface Book {

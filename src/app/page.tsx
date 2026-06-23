@@ -6,6 +6,7 @@ import { Feed } from '../features/Feed/Feed';
 import { Books } from '../features/Books/Books';
 import { Goals } from '../features/Goals/Goals';
 import { Profile } from '../features/Profile/Profile';
+import { SearchPage } from '../features/Search/Search';
 
 export default function Home() {
   const { currentTab } = useApp();
@@ -21,6 +22,7 @@ export default function Home() {
         {currentTab === 'books' && <Books />}
         {currentTab === 'goals' && <Goals />}
         {currentTab === 'profile' && <Profile />}
+        {currentTab === 'search' && <SearchPage />}
       </main>
     </div>
   );

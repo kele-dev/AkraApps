@@ -18,6 +18,10 @@ interface AppContextProps {
   setViewedUser: (user: User | null) => void;
   currentTab: string;
   setCurrentTab: (tab: string) => void;
+  globalSearchQuery: string;
+  setGlobalSearchQuery: (query: string) => void;
+  selectedBookSuggestion: Book | null;
+  setSelectedBookSuggestion: (book: Book | null) => void;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   updateProgress: (bookId: string, page: number, status: ReadingProgress['status']) => void;
@@ -25,7 +29,8 @@ interface AppContextProps {
   likePost: (postId: string) => void;
   addComment: (postId: string, commentContent: string) => void;
   setGoal: (targetBooks: number) => void;
-  addBook: (title: string, author: string, totalPages: number, category: string) => void;
+  addBook: (title: string, author: string, totalPages: number, category: string, coverImage?: string) => Book | undefined;
+  updateProfile: (updates: Partial<Omit<User, 'id'>>) => void;
 }
 
 const AppContext = createContext<AppContextProps | undefined>(undefined);
@@ -112,7 +117,7 @@ const INITIAL_GOALS = (userId: string): ReadingGoal[] => [
 ];
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [users] = useState<User[]>(INITIAL_USERS);
+  const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [currentUser, setCurrentUser] = useState<User>(GUEST_USER);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -122,6 +127,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Routing state
   const [currentTab, setCurrentTab] = useState<string>('feed');
+  const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
+  const [selectedBookSuggestion, setSelectedBookSuggestion] = useState<Book | null>(null);
 
   // Core App states
   const [books, setBooks] = useState<Book[]>(INITIAL_BOOKS);
@@ -321,18 +328,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateProgress = (bookId: string, page: number, status: ReadingProgress['status']) => {
     if (currentUser.id === 'guest') return;
 
+    let finalStatus = status;
+    let finalPage = page;
+
     setReadingProgress((prev) => {
       const existingIdx = prev.findIndex((p) => p.userId === currentUser.id && p.bookId === bookId);
       const book = books.find((b) => b.id === bookId);
       const limitPage = book ? book.totalPages : page;
-      const checkedPage = Math.min(page, limitPage);
-      const finalStatus = checkedPage === limitPage ? 'COMPLETED' : status;
+      
+      finalStatus = status === 'COMPLETED' || page >= limitPage ? 'COMPLETED' : status;
+      finalPage = finalStatus === 'COMPLETED' ? limitPage : Math.max(0, Math.min(page, limitPage));
 
       let newProgress = [...prev];
       if (existingIdx > -1) {
         newProgress[existingIdx] = {
           ...newProgress[existingIdx],
-          currentPage: checkedPage,
+          currentPage: finalPage,
           status: finalStatus,
           updatedAt: new Date().toISOString(),
         };
@@ -341,7 +352,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           id: `p_${Date.now()}`,
           userId: currentUser.id,
           bookId,
-          currentPage: checkedPage,
+          currentPage: finalPage,
           status: finalStatus,
           updatedAt: new Date().toISOString(),
         });
@@ -358,15 +369,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Automatically create a post for progress update or completion
     const targetBook = books.find((b) => b.id === bookId);
     if (targetBook) {
-      const displayStatus = page >= targetBook.totalPages 
+      const displayStatus = finalStatus === 'COMPLETED' 
         ? `Telah menyelesaikan membaca buku "${targetBook.title}"! 🎉` 
-        : `Mencapai halaman ${page} dari ${targetBook.totalPages} untuk buku "${targetBook.title}"`;
+        : `Mencapai halaman ${finalPage} dari ${targetBook.totalPages} untuk buku "${targetBook.title}"`;
       
       addPost(
         'PROGRESS_UPDATE',
         displayStatus,
         bookId,
-        page
+        finalPage
       );
     }
   };
@@ -475,18 +486,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const addBook = (title: string, author: string, totalPages: number, category: string) => {
-    if (currentUser.id === 'guest') return;
+  const addBook = (title: string, author: string, totalPages: number, category: string, coverImage?: string) => {
+    if (currentUser.id === 'guest') return undefined;
 
     const newBook: Book = {
       id: `b_${Date.now()}`,
       title,
       author,
-      coverImage: 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=300&q=80',
+      coverImage: coverImage || 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=300&q=80',
       totalPages,
       category,
     };
     setBooks((prev) => [...prev, newBook]);
+    return newBook;
+  };
+
+  const updateProfile = async (updates: Partial<Omit<User, 'id'>>) => {
+    if (currentUser.id === 'guest') return;
+
+    const updatedUser = { ...currentUser, ...updates };
+    setCurrentUser(updatedUser);
+
+    if (isDemoMode) {
+      localStorage.setItem('akra_current_user', JSON.stringify(updatedUser));
+    } else {
+      try {
+        await setDoc(doc(db, 'users', currentUser.id), updatedUser);
+      } catch (e) {
+        console.error("Gagal menyimpan profil ke Firestore:", e);
+      }
+    }
+
+    // Update in users list
+    setUsers((prev) =>
+      prev.map((u) => (u.id === currentUser.id ? { ...u, ...updates } : u))
+    );
+
+    // Update posts and comments to reflect new profile info
+    setPosts((prev) =>
+      prev.map((post) => {
+        let updatedPost = { ...post };
+        if (post.userId === currentUser.id) {
+          if (updates.displayName) updatedPost.userDisplayName = updates.displayName;
+          if (updates.avatar) updatedPost.userAvatar = updates.avatar;
+        }
+        updatedPost.comments = post.comments.map((comment) => {
+          if (comment.userId === currentUser.id) {
+            let updatedComment = { ...comment };
+            if (updates.displayName) updatedComment.displayName = updates.displayName;
+            if (updates.avatar) updatedComment.avatar = updates.avatar;
+            return updatedComment;
+          }
+          return comment;
+        });
+        return updatedPost;
+      })
+    );
   };
 
   return (
@@ -503,6 +558,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setViewedUser,
         currentTab,
         setCurrentTab,
+        globalSearchQuery,
+        setGlobalSearchQuery,
+        selectedBookSuggestion,
+        setSelectedBookSuggestion,
         loginWithGoogle,
         logout,
         updateProgress,
@@ -511,6 +570,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addComment,
         setGoal,
         addBook,
+        updateProfile,
       }}
     >
       {children}

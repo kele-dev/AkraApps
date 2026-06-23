@@ -163,7 +163,11 @@ export const Feed: React.FC = () => {
                 </select>
               </div>
               
-              <button type="submit" className="btn-primary">
+              <button 
+                type="submit" 
+                className="btn-primary"
+                disabled={!content.trim()}
+              >
                 Posting
               </button>
             </div>
