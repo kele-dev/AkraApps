@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useApp } from '../../context/AppContext';
+import { useApp, translations } from '../../context/AppContext';
 import { Search, Star, ChevronDown, Check, Users, BookOpen, Quote, HelpCircle } from 'lucide-react';
 import { LOCAL_BOOK_DATABASE } from '../Books/Books';
 import { Book } from '../../types';
+import { searchBooksHybrid } from '../../lib/bookApi';
 
 export const SearchPage: React.FC = () => {
   const { 
@@ -16,7 +17,9 @@ export const SearchPage: React.FC = () => {
     posts, 
     globalSearchQuery, 
     setGlobalSearchQuery,
-    currentUser
+    currentUser,
+    viewBookDetails,
+    language
   } = useApp();
 
   // Search input state
@@ -72,46 +75,18 @@ export const SearchPage: React.FC = () => {
     const startTime = performance.now();
 
     try {
-      // Build Open Library API search query depending on radio filters
-      let apiFilterParam = 'q';
-      if (searchFilter === 'title') apiFilterParam = 'title';
-      else if (searchFilter === 'author') apiFilterParam = 'author';
-
-      const url = `https://openlibrary.org/search.json?${apiFilterParam}=${encodeURIComponent(queryToUse)}&limit=10`;
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const results = await searchBooksHybrid(queryToUse, 10, searchFilter);
       const endTime = performance.now();
       setSearchTime(parseFloat(((endTime - startTime) / 1000).toFixed(2)));
 
-      if (data.docs && data.docs.length > 0) {
-        const results = data.docs.map((doc: any) => {
-          const cover = doc.cover_i 
-            ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
-            : "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=300&q=80";
-          
-          return {
-            id: doc.key || `ol_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            title: doc.title || "Judul Tidak Diketahui",
-            author: doc.author_name ? doc.author_name.join(", ") : "Penulis Tidak Diketahui",
-            coverImage: cover,
-            totalPages: doc.number_of_pages_median || 200,
-            category: doc.subject ? doc.subject[0] : "Umum",
-            firstPublishYear: doc.first_publish_year || 2015
-          };
-        });
-
+      if (results.length > 0) {
         setSearchResults(results);
-        setTotalResults(data.numFound || results.length);
+        setTotalResults(results.length);
       } else {
         triggerLocalFallback(queryToUse, startTime);
       }
     } catch (e) {
-      console.warn("Pencarian Open Library gagal di Halaman Search, beralih ke lokal:", e);
+      console.warn("Pencarian API gagal di Halaman Search, beralih ke lokal:", e);
       triggerLocalFallback(queryToUse, startTime, "Pencarian API gagal (offline). Menampilkan hasil database lokal.");
     } finally {
       setIsSearching(false);
@@ -119,7 +94,7 @@ export const SearchPage: React.FC = () => {
   };
 
   const triggerLocalFallback = (queryText: string, startTime: number, warningMsg = '') => {
-    setSearchWarning(warningMsg || "Buku tidak ditemukan di Open Library. Menampilkan hasil database lokal.");
+    setSearchWarning(warningMsg || "Buku tidak ditemukan. Menampilkan hasil database lokal.");
     const q = queryText.toLowerCase();
     
     // Filter database
@@ -187,14 +162,6 @@ export const SearchPage: React.FC = () => {
     handleAddToShelf(bookData, 'COMPLETED');
   };
 
-  // Generate stable mock rating based on book details
-  const getMockRating = (title: string) => {
-    const charSum = title.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
-    const avgRating = (4.1 + (charSum % 8) * 0.1).toFixed(2);
-    const ratingsCount = ((charSum * 17) % 25000 + 1200).toLocaleString('id-ID');
-    return { avgRating, ratingsCount };
-  };
-
   // Filter local users for People tab
   const getFilteredPeople = () => {
     const q = searchQuery.trim().toLowerCase();
@@ -242,16 +209,16 @@ export const SearchPage: React.FC = () => {
             disabled={isSearching}
           >
             <Search size={14} />
-            {isSearching ? 'Searching...' : 'Search'}
+            {isSearching ? (language === 'id' ? 'Mencari...' : 'Searching...') : (language === 'id' ? 'Cari' : 'Search')}
           </button>
         </form>
 
         {/* Radio Filter Options */}
         <div className="flex gap-4 items-center text-xs text-text-slate-medium pl-1 select-none">
           {[
-            { id: 'all', label: 'all' },
-            { id: 'title', label: 'title' },
-            { id: 'author', label: 'author' }
+            { id: 'all', label: language === 'id' ? 'semua' : 'all' },
+            { id: 'title', label: language === 'id' ? 'judul' : 'title' },
+            { id: 'author', label: language === 'id' ? 'penulis' : 'author' }
           ].map((item) => (
             <label key={item.id} className="flex items-center gap-1.5 cursor-pointer">
               <input
@@ -272,10 +239,10 @@ export const SearchPage: React.FC = () => {
       {/* Sub-tabs Navigation */}
       <div className="flex border-b border-border-light-gray overflow-x-auto">
         {[
-          { id: 'books', label: 'Books' },
-          { id: 'groups', label: 'Groups' },
-          { id: 'quotes', label: 'Quotes' },
-          { id: 'people', label: 'People' },
+          { id: 'books', label: language === 'id' ? 'Buku' : 'Books' },
+          { id: 'groups', label: language === 'id' ? 'Grup' : 'Groups' },
+          { id: 'quotes', label: language === 'id' ? 'Kutipan' : 'Quotes' },
+          { id: 'people', label: language === 'id' ? 'Teman' : 'People' },
           { id: 'listopia', label: 'Listopia' }
         ].map((tab) => (
           <button
@@ -306,20 +273,37 @@ export const SearchPage: React.FC = () => {
             {/* Search Statistics */}
             {searchResults.length > 0 && (
               <div className="text-xs text-text-slate-medium italic">
-                Page 1 of about {totalResults} results ({searchTime} seconds)
+                {language === 'id' 
+                  ? `Halaman 1 dari sekitar ${totalResults} hasil (${searchTime} detik)` 
+                  : `Page 1 of about ${totalResults} results (${searchTime} seconds)`}
               </div>
             )}
 
             {/* Books Results list */}
             {isSearching ? (
-              <div className="flex flex-col items-center py-12 gap-2 text-text-slate-light animate-pulse">
-                <BookOpen className="animate-spin text-brand-orange" size={28} />
-                <span className="text-xs font-semibold">Sedang mencari buku di Open Library...</span>
+              <div className="flex flex-col gap-4 divide-y divide-border-light-gray">
+                {[1, 2, 3].map((n) => (
+                  <div key={n} className="py-4 flex gap-4 items-start first:pt-0 animate-pulse">
+                    {/* Left: Book Cover Skeleton */}
+                    <div className="skeleton w-16 h-22 shrink-0 bg-gray-200" />
+                    
+                    {/* Right: Details Skeleton */}
+                    <div className="flex-1 flex flex-col gap-2">
+                      <div className="skeleton w-1/2 h-5 bg-gray-200" />
+                      <div className="skeleton w-1/4 h-3.5 bg-gray-200" />
+                      <div className="skeleton w-1/3 h-3 bg-gray-200" />
+                      <div className="flex gap-2.5 items-center mt-2">
+                        <div className="skeleton w-24 h-7 bg-gray-200" />
+                        <div className="skeleton w-20 h-7 bg-gray-200" />
+                        <div className="skeleton w-32 h-4 bg-gray-200" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : searchResults.length > 0 ? (
               <div className="divide-y divide-border-light-gray flex flex-col" ref={dropdownRef}>
                 {searchResults.map((book) => {
-                  const ratingInfo = getMockRating(book.title);
                   const libStatus = getLibraryStatus(book.title, book.author);
                   const userRating = userRatings[book.title + book.author] || 0;
 
@@ -329,13 +313,17 @@ export const SearchPage: React.FC = () => {
                       <img
                         src={book.coverImage}
                         alt={book.title}
-                        className="w-16 h-22 object-cover rounded shadow-xs border border-border-light-gray shrink-0 bg-gray-50"
+                        onClick={() => viewBookDetails(book)}
+                        className="w-16 h-22 object-cover rounded shadow-xs border border-border-light-gray shrink-0 bg-gray-50 cursor-pointer hover:opacity-85 transition-opacity"
                       />
 
                       {/* Right: Book Details */}
                       <div className="flex-1 min-w-0 flex flex-col gap-1">
                         {/* Title */}
-                        <h4 className="text-sm font-bold text-text-slate-dark hover:underline cursor-pointer font-serif leading-snug">
+                        <h4 
+                          onClick={() => viewBookDetails(book)}
+                          className="text-sm font-bold text-text-slate-dark hover:underline cursor-pointer font-serif leading-snug"
+                        >
                           {book.title}
                         </h4>
 
@@ -347,19 +335,27 @@ export const SearchPage: React.FC = () => {
 
                         {/* Ratings statistics */}
                         <div className="flex items-center gap-1 text-[10px] text-text-slate-medium">
-                          <div className="flex text-yellow-500 shrink-0">
-                            {[1, 2, 3, 4, 5].map((s) => (
-                              <Star
-                                key={s}
-                                size={10}
-                                fill={s <= Math.round(parseFloat(ratingInfo.avgRating)) ? "currentColor" : "none"}
-                                className="stroke-1"
-                              />
-                            ))}
-                          </div>
-                          <span>
-                            {ratingInfo.avgRating} avg rating — {ratingInfo.ratingsCount} ratings — published {book.firstPublishYear}
-                          </span>
+                          {book.ratingsCount > 0 ? (
+                            <>
+                              <div className="flex text-yellow-500 shrink-0">
+                                {[1, 2, 3, 4, 5].map((s) => (
+                                  <Star
+                                    key={s}
+                                    size={10}
+                                    fill={s <= Math.round(book.rating) ? "currentColor" : "none"}
+                                    className="stroke-1"
+                                  />
+                                ))}
+                              </div>
+                              <span>
+                                {book.rating.toFixed(2)} rating rata-rata — {book.ratingsCount.toLocaleString('id-ID')} penilaian — terbit {book.firstPublishYear}
+                              </span>
+                            </>
+                          ) : (
+                            <span>
+                              Belum ada penilaian — terbit {book.firstPublishYear}
+                            </span>
+                          )}
                         </div>
 
                         {/* Shelf Button & Star Rating Row */}
@@ -384,7 +380,7 @@ export const SearchPage: React.FC = () => {
                                   onClick={() => handleAddToShelf(book, 'WANT_TO_READ')}
                                   className="px-3 bg-[#409d69] hover:bg-[#348055] text-white border-none rounded-l cursor-pointer transition-colors shadow-2xs flex items-center justify-center font-bold"
                                 >
-                                  Want to Read
+                                  {translations[language].wantToRead}
                                 </button>
                                 <button
                                   type="button"
@@ -400,9 +396,9 @@ export const SearchPage: React.FC = () => {
                             {activeDropdownId === book.id && (
                               <div className="absolute left-0 mt-8 w-40 bg-white border border-border-light-gray rounded shadow-md flex flex-col p-1 z-50 animate-fade-in divide-y divide-border-light-gray/50">
                                 {[
-                                  { id: 'WANT_TO_READ', label: 'Want to Read' },
-                                  { id: 'READING', label: 'Currently Reading' },
-                                  { id: 'COMPLETED', label: 'Read' }
+                                  { id: 'WANT_TO_READ', label: translations[language].wantToRead },
+                                  { id: 'READING', label: translations[language].currentlyReading },
+                                  { id: 'COMPLETED', label: translations[language].read }
                                 ].map((option) => (
                                   <button
                                     key={option.id}
@@ -417,18 +413,9 @@ export const SearchPage: React.FC = () => {
                             )}
                           </div>
 
-                          {/* Get a copy button */}
-                          <button
-                            type="button"
-                            onClick={() => alert(`Buku "${book.title}" sedang disiapkan untuk peminjaman digital.`)}
-                            className="h-7 px-3 text-[11px] font-bold bg-[#f4f1ea] hover:bg-[#e8e3d6] text-text-slate-dark border border-[#d6d0c0] rounded cursor-pointer transition-colors shadow-2xs"
-                          >
-                            Get a copy
-                          </button>
-
                           {/* Rate this book stars */}
                           <div className="flex items-center gap-1 text-[10px] text-text-slate-medium select-none ml-1">
-                            <span className="shrink-0">Rate this book:</span>
+                            <span className="shrink-0">{translations[language].rateThisBook}:</span>
                             <div className="flex text-gray-300">
                               {[1, 2, 3, 4, 5].map((star) => (
                                 <Star
@@ -445,7 +432,6 @@ export const SearchPage: React.FC = () => {
                             </div>
                           </div>
                         </div>
-
                       </div>
                     </div>
                   );

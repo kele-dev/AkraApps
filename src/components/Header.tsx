@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Bell, MessageSquare, Users, Search, LogOut, User } from 'lucide-react';
 import { LOCAL_BOOK_DATABASE } from '../features/Books/Books';
+import { AnimatedBook } from './AnimatedBook';
+import { searchBooksHybrid } from '../lib/bookApi';
 
 export const Header: React.FC = () => {
   const { 
@@ -18,20 +20,37 @@ export const Header: React.FC = () => {
     books,
     posts,
     users,
-    setSelectedBookSuggestion
+    setSelectedBookSuggestion,
+    notifications,
+    unreadNotificationCount,
+    markAllNotificationsRead,
+    viewBookDetails,
+    language,
+    setLanguage
   } = useApp();
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [localSearch, setLocalSearch] = useState('');
 
   // Suggestions state
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [onlineSuggestions, setOnlineSuggestions] = useState<any[]>([]);
+  const [isSearchingOnline, setIsSearchingOnline] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const notificationRef = useRef<HTMLDivElement>(null);
 
-  // Click outside to close Suggestions
+  // Click outside to close Suggestions & Profile Dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
         setShowSuggestions(false);
+      }
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -39,6 +58,44 @@ export const Header: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // Debounced API search for live suggestions
+  useEffect(() => {
+    const trimmedQuery = localSearch.trim();
+    if (trimmedQuery.length < 3) {
+      setOnlineSuggestions([]);
+      setIsSearchingOnline(false);
+      return;
+    }
+
+    setIsSearchingOnline(true);
+    const delayDebounceFn = setTimeout(async () => {
+      try {
+        const results = await searchBooksHybrid(trimmedQuery, 5);
+        
+        // Filter out duplicates (already in books or LOCAL_BOOK_DATABASE)
+        const filteredResults = results.filter((onlineBook: any) => {
+          const inMyBooks = books.some(
+            (mb) => mb.title.toLowerCase() === onlineBook.title.toLowerCase() && 
+                    mb.author.toLowerCase() === onlineBook.author.toLowerCase()
+          );
+          const inDbBooks = LOCAL_BOOK_DATABASE.some(
+            (dbb) => dbb.title.toLowerCase() === onlineBook.title.toLowerCase() && 
+                     dbb.author.toLowerCase() === onlineBook.author.toLowerCase()
+          );
+          return !inMyBooks && !inDbBooks;
+        });
+
+        setOnlineSuggestions(filteredResults);
+      } catch (err) {
+        console.warn("Gagal mengambil saran pencarian online:", err);
+      } finally {
+        setIsSearchingOnline(false);
+      }
+    }, 600); // 600ms debounce
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [localSearch, books]);
 
   const query = localSearch.trim().toLowerCase();
 
@@ -62,14 +119,13 @@ export const Header: React.FC = () => {
     ? posts.filter(p => p.content.toLowerCase().includes(query) || (p.bookTitle && p.bookTitle.toLowerCase().includes(query)))
     : [];
 
-  const hasSuggestions = matchingMyBooks.length > 0 || matchingDbBooks.length > 0 || matchingUsers.length > 0 || matchingPosts.length > 0;
+  const hasSuggestions = matchingMyBooks.length > 0 || matchingDbBooks.length > 0 || matchingUsers.length > 0 || matchingPosts.length > 0 || onlineSuggestions.length > 0;
   const showSuggestionsDropdown = showSuggestions && query.length > 0;
 
   const navLinks = [
-    { id: 'feed', label: 'Home Feed' },
-    { id: 'books', label: 'Perpustakaan' },
-    { id: 'goals', label: 'Target Baca' },
-    { id: 'profile', label: 'Profil Saya' }
+    { id: 'feed', label: language === 'id' ? 'Beranda' : 'Home Feed' },
+    { id: 'books', label: language === 'id' ? 'Perpustakaan' : 'Library' },
+    { id: 'profile', label: language === 'id' ? 'Profil Saya' : 'My Profile' }
   ];
 
   return (
@@ -86,16 +142,14 @@ export const Header: React.FC = () => {
             }}
             className="flex items-center gap-2 cursor-pointer"
           >
-            <div className="w-8 h-8 rounded-full bg-brand-orange flex items-center justify-center text-white font-extrabold text-lg">
-              a
-            </div>
+            <AnimatedBook size="sm" className="transform hover:scale-105 active-pop" />
             <span className="text-xl font-extrabold text-brand-orange tracking-tight select-none">
               akra
             </span>
           </div>
 
           {/* Navigation Links */}
-          <nav className="flex gap-4">
+          <nav className="hidden md:flex gap-4">
             {navLinks.map((link) => (
               <button
                 key={link.id}
@@ -124,7 +178,7 @@ export const Header: React.FC = () => {
           <input
             type="text"
             className="input-field w-full pl-9 rounded-full h-8.5 text-xs bg-gray-100 border border-transparent py-1.5 focus:outline-none focus:border-brand-orange focus:bg-white transition-all"
-            placeholder="Cari buku, kutipan, atau teman..."
+            placeholder={language === 'id' ? "Cari buku, kutipan, atau teman..." : "Search books, quotes, or friends..."}
             value={localSearch}
             onChange={(e) => {
               setLocalSearch(e.target.value);
@@ -149,7 +203,7 @@ export const Header: React.FC = () => {
               {matchingMyBooks.length > 0 && (
                 <div className="p-2">
                   <div className="text-[10px] font-extrabold text-brand-orange uppercase px-2 py-1 mb-1">
-                    Buku Saya ({matchingMyBooks.length})
+                    {language === 'id' ? 'Buku Saya' : 'My Books'} ({matchingMyBooks.length})
                   </div>
                   {matchingMyBooks.map(b => (
                     <div
@@ -164,7 +218,7 @@ export const Header: React.FC = () => {
                       <img src={b.coverImage} alt={b.title} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-text-slate-dark truncate">{b.title}</p>
-                        <p className="text-[10px] text-text-slate-medium truncate">{b.author}</p>
+                        <p className="text-[10px] text-text-slate-medium truncate">{language === 'id' ? 'oleh' : 'by'} {b.author}</p>
                       </div>
                     </div>
                   ))}
@@ -175,14 +229,13 @@ export const Header: React.FC = () => {
               {matchingDbBooks.length > 0 && (
                 <div className="p-2">
                   <div className="text-[10px] font-extrabold text-brand-orange uppercase px-2 py-1 mb-1">
-                    Buku Baru (Database)
+                    {language === 'id' ? 'Buku Baru (Database)' : 'New Books (Database)'}
                   </div>
                   {matchingDbBooks.map(b => (
                     <div
                       key={b.id}
                       onClick={() => {
-                        setSelectedBookSuggestion(b as any);
-                        setCurrentTab('books');
+                        viewBookDetails(b as any);
                         setLocalSearch('');
                         setShowSuggestions(false);
                       }}
@@ -191,10 +244,10 @@ export const Header: React.FC = () => {
                       <img src={b.coverImage} alt={b.title} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-text-slate-dark truncate">{b.title}</p>
-                        <p className="text-[10px] text-text-slate-medium truncate">oleh {b.author}</p>
+                        <p className="text-[10px] text-text-slate-medium truncate">{language === 'id' ? 'oleh' : 'by'} {b.author}</p>
                       </div>
                       <span className="text-[9px] text-brand-orange border border-brand-orange/30 bg-brand-orange-glow px-1.5 py-0.5 rounded-md font-bold shrink-0 transition-all hover:bg-brand-orange hover:text-white">
-                        + Tambah
+                        {language === 'id' ? '+ Tambah' : '+ Add'}
                       </span>
                     </div>
                   ))}
@@ -205,7 +258,7 @@ export const Header: React.FC = () => {
               {matchingUsers.length > 0 && (
                 <div className="p-2">
                   <div className="text-[10px] font-extrabold text-brand-orange uppercase px-2 py-1 mb-1">
-                    Teman & Pengguna
+                    {language === 'id' ? 'Teman & Pengguna' : 'Friends & Users'}
                   </div>
                   {matchingUsers.map(u => (
                     <div
@@ -232,7 +285,7 @@ export const Header: React.FC = () => {
               {matchingPosts.length > 0 && (
                 <div className="p-2">
                   <div className="text-[10px] font-extrabold text-brand-orange uppercase px-2 py-1 mb-1">
-                    Kutipan & Catatan
+                    {language === 'id' ? 'Kutipan & Catatan' : 'Quotes & Thoughts'}
                   </div>
                   {matchingPosts.map(p => (
                     <div
@@ -245,15 +298,66 @@ export const Header: React.FC = () => {
                       className="p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex flex-col gap-0.5 transition-colors"
                     >
                       <p className="text-text-slate-dark truncate italic font-medium">"{p.content}"</p>
-                      {p.bookTitle && <p className="text-[9px] text-text-slate-medium truncate">Buku: {p.bookTitle}</p>}
+                      {p.bookTitle && <p className="text-[9px] text-text-slate-medium truncate">{language === 'id' ? 'Buku' : 'Book'}: {p.bookTitle}</p>}
                     </div>
                   ))}
                 </div>
               )}
 
-              {!hasSuggestions && (
-                <div className="p-4 text-center text-text-slate-light text-[11px] font-medium leading-relaxed">
-                  Tidak ada hasil lokal. Tekan <span className="font-bold text-text-slate-dark">Enter</span> untuk cari online di Open Library.
+              {/* Category: Hasil Online */}
+              {isSearchingOnline ? (
+                <div className="p-3 text-center text-text-slate-medium text-[10px] flex items-center justify-center gap-2">
+                  <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-brand-orange border-t-transparent rounded-full" />
+                  {language === 'id' ? 'Mencari buku...' : 'Searching books...'}
+                </div>
+              ) : (
+                onlineSuggestions.length > 0 && (
+                  <div className="p-2">
+                    <div className="text-[10px] font-extrabold text-brand-orange uppercase px-2 py-1 mb-1">
+                      {language === 'id' ? 'Buku Baru' : 'New Books'}
+                    </div>
+                    {onlineSuggestions.map(b => (
+                      <div
+                        key={b.id}
+                        onClick={() => {
+                          viewBookDetails(b as any);
+                          setLocalSearch('');
+                          setShowSuggestions(false);
+                        }}
+                        className="p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
+                      >
+                        <img src={b.coverImage} alt={b.title} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-text-slate-dark truncate">{b.title}</p>
+                          <p className="text-[10px] text-text-slate-medium truncate">{language === 'id' ? 'oleh' : 'by'} {b.author}</p>
+                        </div>
+                        <span className="text-[9px] text-brand-orange border border-brand-orange/30 bg-brand-orange-glow px-1.5 py-0.5 rounded-md font-bold shrink-0 transition-all hover:bg-brand-orange hover:text-white">
+                          {language === 'id' ? '+ Tambah' : '+ Add'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )
+              )}
+
+              {!hasSuggestions && !isSearchingOnline && (
+                <div className="p-2 flex flex-col gap-1.5">
+                  <div className="p-2 text-center text-text-slate-light text-[11px] font-medium leading-relaxed">
+                    {language === 'id' ? 'Tidak ada hasil lokal atau online yang ditemukan.' : 'No local or online results found.'}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGlobalSearchQuery(localSearch);
+                      setCurrentTab('search');
+                      setLocalSearch('');
+                      setShowSuggestions(false);
+                    }}
+                    className="w-full py-2 px-3 bg-brand-orange/10 hover:bg-brand-orange/20 text-brand-orange text-[11px] font-bold rounded-md border-none cursor-pointer text-center transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <Search size={12} />
+                    {language === 'id' ? 'Cari online' : 'Search online'} "{localSearch}"
+                  </button>
                 </div>
               )}
             </div>
@@ -264,21 +368,125 @@ export const Header: React.FC = () => {
         <div className="flex items-center gap-4 relative">
           {isLoggedIn ? (
             <>
-              {/* Logged In Utilities */}
-              <button className="bg-transparent border-none cursor-pointer text-text-slate-medium p-1.5 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors">
-                <Bell size={20} className="text-brand-orange" />
-              </button>
+              {/* Notification Bell */}
+              <div className="relative" ref={notificationRef}>
+                <button 
+                  onClick={() => {
+                    setShowNotifications(!showNotifications);
+                    setShowDropdown(false);
+                  }}
+                  className="relative bg-transparent border-none cursor-pointer text-text-slate-medium p-1.5 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors"
+                >
+                  <Bell size={20} className="text-brand-orange" />
+                  {unreadNotificationCount > 0 && (
+                    <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white text-[9px] font-extrabold rounded-full flex items-center justify-center shadow-sm animate-pulse">
+                      {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Notification Dropdown Panel */}
+                {showNotifications && (
+                  <div className="absolute right-0 mt-2.5 w-80 bg-white border border-border-light-gray rounded-xl shadow-lg z-50 overflow-hidden animate-fade-in">
+                    {/* Panel Header */}
+                    <div className="flex justify-between items-center px-4 py-3 border-b border-border-light-gray bg-bg-light-gray">
+                      <h4 className="text-xs font-extrabold text-text-slate-dark">Notifikasi</h4>
+                      {unreadNotificationCount > 0 && (
+                        <button
+                          onClick={() => markAllNotificationsRead()}
+                          className="text-[10px] font-bold text-brand-orange hover:text-brand-orange-hover bg-transparent border-none cursor-pointer"
+                        >
+                          Tandai semua dibaca
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Notification List */}
+                    <div className="flex flex-col max-h-80 overflow-y-auto divide-y divide-border-light-gray/50">
+                      {notifications.length === 0 ? (
+                        <p className="text-center text-xs text-text-slate-light py-8 font-medium">Tidak ada notifikasi baru.</p>
+                      ) : (
+                        notifications.slice(0, 8).map((notif) => {
+                          const notifIcon = {
+                            LIKE: '❤️',
+                            COMMENT: '💬',
+                            PROGRESS: '📖',
+                            BUDDY_READ: '👥',
+                            COMPLETED: '🎉'
+                          }[notif.type];
+
+                          const relativeTime = (() => {
+                            const diff = Date.now() - new Date(notif.createdAt).getTime();
+                            const mins = Math.floor(diff / 60000);
+                            const hours = Math.floor(diff / 3600000);
+                            const days = Math.floor(diff / 86400000);
+                            if (mins < 60) return `${mins}m lalu`;
+                            if (hours < 24) return `${hours}j lalu`;
+                            return `${days}h lalu`;
+                          })();
+
+                          return (
+                            <div
+                              key={notif.id}
+                              className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${
+                                !notif.isRead ? 'bg-brand-orange/[0.04]' : ''
+                              }`}
+                            >
+                              {/* Avatar */}
+                              <div className="relative shrink-0">
+                                <img
+                                  src={notif.fromUserAvatar}
+                                  alt={notif.fromUserDisplayName}
+                                  className="w-8 h-8 rounded-full object-cover border border-border-light-gray"
+                                />
+                                <span className="absolute -bottom-0.5 -right-0.5 text-[11px] bg-white rounded-full shadow-xs border border-white">{notifIcon}</span>
+                              </div>
+
+                              {/* Text */}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[11px] text-text-slate-dark leading-snug">
+                                  <span className="font-bold">{notif.fromUserDisplayName}</span>{' '}
+                                  <span className="text-text-slate-medium">{notif.message}</span>
+                                </p>
+                                <p className="text-[10px] text-text-slate-light mt-0.5 font-semibold">{relativeTime}</p>
+                              </div>
+
+                              {/* Unread dot */}
+                              {!notif.isRead && (
+                                <div className="w-2 h-2 rounded-full bg-brand-orange shrink-0 mt-1" />
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* View All Footer */}
+                    <div className="p-3 border-t border-border-light-gray bg-bg-light-gray text-center">
+                      <button
+                        onClick={() => {
+                          markAllNotificationsRead();
+                          setShowNotifications(false);
+                        }}
+                        className="text-[11px] font-bold text-brand-orange hover:text-brand-orange-hover bg-transparent border-none cursor-pointer"
+                      >
+                        Lihat semua aktivitas →
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
               
-              <button className="bg-transparent border-none cursor-pointer text-text-slate-medium p-1.5 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors">
+              <button className="hidden sm:flex bg-transparent border-none cursor-pointer text-text-slate-medium p-1.5 rounded-full items-center justify-center hover:bg-gray-100 transition-colors">
                 <MessageSquare size={20} className="text-brand-orange" />
               </button>
               
-              <button className="bg-transparent border-none cursor-pointer text-text-slate-medium p-1.5 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors">
+              <button className="hidden sm:flex bg-transparent border-none cursor-pointer text-text-slate-medium p-1.5 rounded-full items-center justify-center hover:bg-gray-100 transition-colors">
                 <Users size={20} className="text-brand-orange" />
               </button>
 
               {/* User Profile Avatar with Click Dropdown */}
-              <div className="relative">
+              <div className="relative" ref={dropdownRef}>
                 <img
                   src={currentUser.avatar}
                   alt={currentUser.displayName}
@@ -303,18 +511,42 @@ export const Header: React.FC = () => {
                       className="flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs font-semibold text-text-slate-medium rounded-md hover:bg-gray-100 hover:text-text-slate-dark transition-all cursor-pointer border-none bg-transparent"
                     >
                       <User size={14} className="text-text-slate-light" />
-                      Profil Saya
+                      {language === 'id' ? 'Profil Saya' : 'My Profile'}
                     </button>
+
+                    <div className="px-3 py-2 border-t border-border-light-gray mt-1 flex items-center justify-between text-xs font-semibold">
+                      <span className="text-text-slate-medium text-[11px]">{language === 'id' ? 'Bahasa' : 'Language'}</span>
+                      <div className="inline-flex rounded-md overflow-hidden bg-bg-light-gray p-0.5 border border-border-light-gray">
+                        <button
+                          type="button"
+                          onClick={() => setLanguage('id')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-extrabold cursor-pointer border-none ${
+                            language === 'id' ? 'bg-white text-brand-orange shadow-xs font-black' : 'bg-transparent text-text-slate-medium'
+                          }`}
+                        >
+                          ID
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLanguage('en')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-extrabold cursor-pointer border-none ${
+                            language === 'en' ? 'bg-white text-brand-orange shadow-xs font-black' : 'bg-transparent text-text-slate-medium'
+                          }`}
+                        >
+                          EN
+                        </button>
+                      </div>
+                    </div>
 
                     <button
                       onClick={async () => {
                         setShowDropdown(false);
                         await logout();
                       }}
-                      className="flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs font-semibold text-red-600 rounded-md hover:bg-red-50 transition-all cursor-pointer border-none bg-transparent"
+                      className="flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs font-semibold text-red-600 rounded-md hover:bg-red-50 transition-all cursor-pointer border-none bg-transparent border-t border-border-light-gray/40 pt-2"
                     >
                       <LogOut size={14} className="text-red-500" />
-                      Keluar
+                      {language === 'id' ? 'Keluar' : 'Log Out'}
                     </button>
                   </div>
                 )}

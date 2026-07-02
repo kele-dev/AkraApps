@@ -3,7 +3,7 @@ import "./globals.css";
 import { AppProvider } from "../context/AppContext";
 
 export const metadata: Metadata = {
-  title: "AKRA — Di Sini Kita Akrab dengan Kata",
+  title: "AKRA — Share pages, find bookmates",
   description: "AKRA — Media sosial dan komunitas bagi para pembaca buku untuk berbagi kutipan, memposting pemikiran, dan mencatat progres membaca bersama.",
 };
 

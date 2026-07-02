@@ -14,7 +14,9 @@ const firebaseConfig = {
 // Check if actual configuration keys exist
 const hasFirebaseConfig = 
   !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY && 
-  process.env.NEXT_PUBLIC_FIREBASE_API_KEY !== "undefined";
+  process.env.NEXT_PUBLIC_FIREBASE_API_KEY !== "undefined" &&
+  !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith("MASUKKAN_") &&
+  !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith("YOUR_");
 
 let app;
 let auth: any = null;

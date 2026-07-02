@@ -1,4 +1,5 @@
 import React from 'react';
+import { useApp } from '../context/AppContext';
 
 interface ProgressBarProps {
   value: number;
@@ -7,12 +8,13 @@ interface ProgressBarProps {
   color?: 'emerald' | 'gold' | 'purple';
 }
 
-export const ProgressBar: React.FC<ProgressBarProps> = ({ 
-  value, 
-  max, 
-  showText = true, 
-  color = 'emerald' 
+export const ProgressBar: React.FC<ProgressBarProps> = ({
+  value,
+  max,
+  showText = true,
+  color = 'emerald'
 }) => {
+  const { language } = useApp();
   const percentage = Math.round((value / max) * 100) || 0;
 
   const colorMap = {
@@ -37,7 +39,9 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
       {showText && (
         <div className="flex justify-between mb-2 text-xs">
           <span className="text-text-slate-medium font-medium">
-            {value} dari {max} halaman
+            {language === 'id' 
+              ? `${value} dari ${max} halaman` 
+              : `${value} of ${max} pages`}
           </span>
           <span className={`${selectedColor.text} font-bold`}>
             {percentage}%

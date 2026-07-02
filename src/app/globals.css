@@ -173,4 +173,128 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.08);
 }
 
+/* Skeleton & Micro-interactions Helpers */
+.skeleton {
+  background-color: #e9ecef;
+  animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  border-radius: 0.375rem;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .4; }
+}
+
+@keyframes pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.animate-pop {
+  animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.hover-scale {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hover-scale:hover {
+  transform: scale(1.05);
+}
+
+.active-pop {
+  transition: transform 0.1s ease;
+}
+
+.active-pop:active {
+  transform: scale(0.95);
+}
+
+@keyframes story-progress {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+.animate-story-progress {
+  animation: story-progress 5s linear forwards;
+}
+
+/* Flipping Book Animation */
+.flipping-book {
+  width: 24px;
+  height: 18px;
+  position: relative;
+  perspective: 150px;
+  display: inline-block;
+}
+
+.flipping-book .book-spine {
+  position: absolute;
+  left: 11px;
+  top: 0;
+  width: 2px;
+  height: 18px;
+  background-color: var(--color-brand-orange);
+  border-radius: 1px;
+  z-index: 5;
+}
+
+.flipping-book .book-cover-left,
+.flipping-book .book-cover-right {
+  position: absolute;
+  top: 0;
+  width: 12px;
+  height: 18px;
+  background-color: #382110; /* Dark cover */
+}
+.flipping-book .book-cover-left {
+  left: 0;
+  border-radius: 2px 0 0 2px;
+}
+.flipping-book .book-cover-right {
+  left: 12px;
+  border-radius: 0 2px 2px 0;
+}
+
+.flipping-book .page {
+  position: absolute;
+  top: 1px;
+  left: 12px;
+  width: 10px;
+  height: 16px;
+  background-color: #fffdec; /* Warm paper color */
+  border-left: 1px solid rgba(0, 0, 0, 0.15);
+  transform-origin: left center;
+  border-radius: 0 1px 1px 0;
+  animation: flip-page 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  z-index: 3;
+}
+
+.flipping-book .page:nth-child(4) {
+  animation-delay: 0.3s;
+}
+.flipping-book .page:nth-child(5) {
+  animation-delay: 0.6s;
+}
+.flipping-book .page:nth-child(6) {
+  animation-delay: 0.9s;
+}
+
+@keyframes flip-page {
+  0% {
+    transform: rotateY(0deg);
+    z-index: 4;
+  }
+  40% {
+    transform: rotateY(-180deg);
+    z-index: 4;
+  }
+  100% {
+    transform: rotateY(-180deg);
+    z-index: 2;
+  }
+}
+
+
 
