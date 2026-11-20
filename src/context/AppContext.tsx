@@ -4,7 +4,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { User, Book, ReadingProgress, Post, ReadingGoal, Comment, Story, Shelf, BuddyRead, BuddyMessage, Notification } from '../types';
 import { auth, db, isDemoMode, simulateGoogleSignIn, signInWithGoogleReal } from '../lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, doc, setDoc, getDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, query, where, limit, deleteDoc } from 'firebase/firestore';
+import { canDeletePost, filterOwnedRecordsForSync, FIRESTORE_QUERY_LIMITS } from '../lib/firestoreSync';
 
 // Helper to recursively clean undefined values for Firestore
 const cleanUndefined = (obj: any): any => {
@@ -332,8 +333,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       setIsLoggedIn(true);
 
-      // Query Books
-      const booksQuery = query(collection(db, 'books'));
+      // Query Books (bounded)
+      const booksQuery = query(collection(db, 'books'), limit(FIRESTORE_QUERY_LIMITS.books));
       const booksSnap = await getDocs(booksQuery);
       const booksList: Book[] = [];
       booksSnap.forEach((docSnap) => {
@@ -341,17 +342,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       setBooks(booksList.length > 0 ? booksList : INITIAL_BOOKS);
 
-      // 2. Query Users (all registered members) to populate the social network feed
-      const usersQuery = query(collection(db, 'users'));
+      // 2. Query Users (bounded public directory for social feed)
+      const usersQuery = query(collection(db, 'users'), limit(FIRESTORE_QUERY_LIMITS.users));
       const usersSnap = await getDocs(usersQuery);
       const usersList: User[] = [];
       usersSnap.forEach((docSnap) => {
-        const u = docSnap.data() as User;
-        if (u.id.startsWith('user_') || ['Rachel Amanda', 'Dimas Aditya', 'Aditya Wibowo', 'Siti Rahma', 'Budi Santoso'].includes(u.displayName)) {
-          deleteDoc(doc(db, 'users', docSnap.id)).catch(err => console.warn("Failed to delete mock user:", err));
-        } else {
-          usersList.push(u);
-        }
+        usersList.push(docSnap.data() as User);
       });
       
       // Merge with initial users to ensure default demo accounts exist if not in Firestore
@@ -364,49 +360,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       setUsers(mergedUsers);
 
-      // Query Progress
-      const progressQuery = query(collection(db, 'progress'));
+      // Query Progress (bounded)
+      const progressQuery = query(collection(db, 'progress'), limit(FIRESTORE_QUERY_LIMITS.progress));
       const progressSnap = await getDocs(progressQuery);
       const progressList: ReadingProgress[] = [];
       progressSnap.forEach((docSnap) => {
-        const p = docSnap.data() as ReadingProgress;
-        if (p.userId.startsWith('user_')) {
-          deleteDoc(doc(db, 'progress', docSnap.id)).catch(err => console.warn(err));
-        } else {
-          progressList.push(p);
-        }
+        progressList.push(docSnap.data() as ReadingProgress);
       });
       setReadingProgress(progressList.length > 0 ? progressList : INITIAL_PROGRESS(userId));
 
-      // Query Goals
-      const goalsQuery = query(collection(db, 'goals'));
+      // Query Goals (scoped strictly to current user)
+      const goalsQuery = query(
+        collection(db, 'goals'),
+        where('userId', '==', userId),
+        limit(FIRESTORE_QUERY_LIMITS.goals)
+      );
       const goalsSnap = await getDocs(goalsQuery);
       const goalsList: ReadingGoal[] = [];
       goalsSnap.forEach((docSnap) => {
-        const g = docSnap.data() as ReadingGoal;
-        if (g.userId.startsWith('user_')) {
-          deleteDoc(doc(db, 'goals', docSnap.id)).catch(err => console.warn(err));
-        } else {
-          goalsList.push(g);
-        }
+        goalsList.push(docSnap.data() as ReadingGoal);
       });
       setGoals(goalsList.length > 0 ? goalsList : INITIAL_GOALS(userId));
 
-      // Query Posts
-      const postsQuery = query(collection(db, 'posts'));
+      // Query Posts (bounded)
+      const postsQuery = query(collection(db, 'posts'), limit(FIRESTORE_QUERY_LIMITS.posts));
       const postsSnap = await getDocs(postsQuery);
       const postsList: Post[] = [];
       postsSnap.forEach((docSnap) => {
-        const p = docSnap.data() as Post;
-        const isMock = p.userId.startsWith('user_') || 
-                       ['Rachel Amanda', 'Dimas Aditya', 'Aditya Wibowo', 'Siti Rahma', 'Budi Santoso'].includes(p.userDisplayName) ||
-                       p.content.includes("Kita tidak bisa mengendalikan hal eksternal") ||
-                       p.content.includes("fiksi bersama");
-        if (isMock) {
-          deleteDoc(doc(db, 'posts', docSnap.id)).catch(err => console.warn("Failed to delete mock post:", err));
-        } else {
-          postsList.push(p);
-        }
+        postsList.push(docSnap.data() as Post);
       });
       setPosts(postsList.length > 0 ? postsList : INITIAL_POSTS(userId, finalUser.displayName, finalUser.avatar));
     } catch (e) {
@@ -436,24 +417,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Sync to Firestore
+  // Sync to Firestore (only current user's owned documents)
   const syncDataToFirestore = async () => {
     if (isDemoMode || currentUser.id === 'guest') return;
     try {
-      // Sync Books
+      const owned = filterOwnedRecordsForSync(currentUser.id, {
+        readingProgress,
+        goals,
+        posts,
+      });
       for (const book of books) {
         await setDoc(doc(db, 'books', book.id), cleanUndefined(book));
       }
-      // Sync Progress
-      for (const p of readingProgress) {
+      for (const p of owned.readingProgress) {
         await setDoc(doc(db, 'progress', p.id), cleanUndefined(p));
       }
-      // Sync Goals
-      for (const g of goals) {
+      for (const g of owned.goals) {
         await setDoc(doc(db, 'goals', `${g.userId}_${g.year}`), cleanUndefined(g));
       }
-      // Sync Posts
-      for (const post of posts) {
+      for (const post of owned.posts) {
         await setDoc(doc(db, 'posts', post.id), cleanUndefined(post));
       }
     } catch (e) {
@@ -607,6 +589,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deletePost = async (postId: string) => {
+    const targetPost = posts.find((p) => p.id === postId);
+    if (!canDeletePost(targetPost, currentUser.id)) return;
+
     setPosts((prev) => prev.filter((p) => p.id !== postId));
     if (!isDemoMode && currentUser.id !== 'guest') {
       try {
