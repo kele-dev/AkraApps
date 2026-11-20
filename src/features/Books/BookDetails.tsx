@@ -7,6 +7,7 @@ import { ArrowLeft, Star, Share2, ChevronDown, ChevronUp, Pen, Check } from 'luc
 import { ProgressBar } from '../../components/ProgressBar';
 import { computePercent } from '../../lib/idAndMath';
 import { fetchWithTimeout } from '../../lib/http';
+import { resolveUserBookRating } from '../../lib/bookRating';
 
 export const BookDetails: React.FC = () => {
   const { 
@@ -70,20 +71,16 @@ export const BookDetails: React.FC = () => {
 
     let active = true;
     const controller = new AbortController();
-    setIsLoading(true);
-    setIsDescExpanded(false);
-    setIsEditionsExpanded(false);
-
-    setInputPage(undefined);
-
-    // Reset user rating initially
-    const progress = readingProgress.find(p => p.userId === currentUser.id && p.bookId === selectedBook.id);
-    setUserRating(progress && progress.status === 'COMPLETED' ? 5 : 0);
 
     const loadData = async () => {
+      setIsLoading(true);
+      setIsDescExpanded(false);
+      setIsEditionsExpanded(false);
+      setInputPage(undefined);
+      setUserRating(0);
+
       try {
         let workId = selectedBook.id;
-
 
         // If local book, try to search for it on Open Library first
         if (!workId.startsWith('/')) {
@@ -128,93 +125,83 @@ export const BookDetails: React.FC = () => {
           const seed = titleCharSum;
           let rating = parseFloat((3.8 + (seed % 11) * 0.1).toFixed(2));
           let ratingsCount = (seed * 17) % 45000 + 350;
-          
-          try {
-            const ratingsUrl = `https://openlibrary.org${workId}/ratings.json`;
-            const ratingsRes = await fetchWithTimeout(ratingsUrl, { signal: controller.signal });
-            if (ratingsRes.ok) {
-              const ratingsData = await ratingsRes.json();
-              if (ratingsData.summary) {
-                if (ratingsData.summary.average && ratingsData.summary.average > 0) {
-                  rating = parseFloat(ratingsData.summary.average.toFixed(2));
-                }
-                if (ratingsData.summary.count && ratingsData.summary.count > 0) {
-                  ratingsCount = ratingsData.summary.count;
-                }
-              }
-            }
-          } catch (err) {
-            if ((err as { name?: string })?.name !== 'AbortError') {
-              console.warn("Failed to fetch ratings from Open Library API:", err);
-            }
-          }
-
-          const reviewsCount = Math.max(1, Math.floor(ratingsCount * (0.04 + (seed % 3) * 0.01)));
-
           const publishedDate = workData.first_publish_date || "2015";
-          
-          // Fetch editions to find real page count and binding
           let pages = selectedBook.totalPages || 200;
           let binding = "Paperback";
-          try {
-            const editionsUrl = `https://openlibrary.org${workId}/editions.json?limit=10`;
-            const editionsRes = await fetchWithTimeout(editionsUrl, { signal: controller.signal });
-            if (editionsRes.ok) {
-              const editionsData = await editionsRes.json();
-              if (editionsData.entries && editionsData.entries.length > 0) {
-                // Find first edition with a valid page count
-                const withPages = editionsData.entries.find((e: any) => e.number_of_pages && e.number_of_pages > 5);
-                if (withPages) {
-                  pages = withPages.number_of_pages;
-                  if (withPages.physical_format) {
-                    binding = withPages.physical_format;
-                  }
-                } else {
-                  const first = editionsData.entries[0];
-                  if (first.number_of_pages) pages = first.number_of_pages;
-                  if (first.physical_format) binding = first.physical_format;
-                }
-              }
-            }
-          } catch (err) {
-            if ((err as { name?: string })?.name !== 'AbortError') {
-              console.warn("Failed to fetch edition details:", err);
-            }
-          }
-
-          // Fetch Author profile
           let authorName = selectedBook.author;
           let authorAvatar = "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&h=150&q=80";
           let authorBio = `${authorName} adalah penulis terkemuka yang berkontribusi banyak dalam dunia sastra.`;
           let authorStats = "12 books · 1.2k followers";
 
-          if (workData.authors && workData.authors.length > 0) {
-            try {
-              const authorKey = workData.authors[0].author.key;
-              const authorUrl = `https://openlibrary.org${authorKey}.json`;
-              const authorRes = await fetchWithTimeout(authorUrl, { signal: controller.signal });
-              if (authorRes.ok) {
-                const authorData = await authorRes.json();
-                authorName = authorData.name || authorData.personal_name || authorName;
-                
-                if (authorData.bio) {
-                  if (typeof authorData.bio === 'string') {
-                    authorBio = authorData.bio;
-                  } else if (authorData.bio.value) {
-                    authorBio = authorData.bio.value;
-                  }
-                }
+          const authorKey = workData.authors?.[0]?.author?.key as string | undefined;
 
-                if (authorData.photos && authorData.photos.length > 0) {
-                  authorAvatar = `https://covers.openlibrary.org/a/id/${authorData.photos[0]}-M.jpg`;
-                }
-                authorStats = `${(seed % 15) + 3} books · ${((seed * 3) % 20) + 1}k followers`;
+          const [ratingsRes, editionsRes, authorRes] = await Promise.all([
+            fetchWithTimeout(`https://openlibrary.org${workId}/ratings.json`, { signal: controller.signal }).catch((err) => {
+              if ((err as { name?: string })?.name !== 'AbortError') {
+                console.warn("Failed to fetch ratings from Open Library API:", err);
               }
-            } catch (err) {
-              console.warn("Failed to fetch author details:", err);
+              return null;
+            }),
+            fetchWithTimeout(`https://openlibrary.org${workId}/editions.json?limit=10`, { signal: controller.signal }).catch((err) => {
+              if ((err as { name?: string })?.name !== 'AbortError') {
+                console.warn("Failed to fetch edition details:", err);
+              }
+              return null;
+            }),
+            authorKey
+              ? fetchWithTimeout(`https://openlibrary.org${authorKey}.json`, { signal: controller.signal }).catch((err) => {
+                  if ((err as { name?: string })?.name !== 'AbortError') {
+                    console.warn("Failed to fetch author details:", err);
+                  }
+                  return null;
+                })
+              : Promise.resolve(null),
+          ]);
+
+          if (ratingsRes?.ok) {
+            const ratingsData = await ratingsRes.json();
+            if (ratingsData.summary) {
+              if (ratingsData.summary.average && ratingsData.summary.average > 0) {
+                rating = parseFloat(ratingsData.summary.average.toFixed(2));
+              }
+              if (ratingsData.summary.count && ratingsData.summary.count > 0) {
+                ratingsCount = ratingsData.summary.count;
+              }
             }
           }
 
+          if (editionsRes?.ok) {
+            const editionsData = await editionsRes.json();
+            if (editionsData.entries && editionsData.entries.length > 0) {
+              const withPages = editionsData.entries.find((e: any) => e.number_of_pages && e.number_of_pages > 5);
+              if (withPages) {
+                pages = withPages.number_of_pages;
+                if (withPages.physical_format) binding = withPages.physical_format;
+              } else {
+                const first = editionsData.entries[0];
+                if (first.number_of_pages) pages = first.number_of_pages;
+                if (first.physical_format) binding = first.physical_format;
+              }
+            }
+          }
+
+          if (authorRes?.ok) {
+            const authorData = await authorRes.json();
+            authorName = authorData.name || authorData.personal_name || authorName;
+            if (authorData.bio) {
+              if (typeof authorData.bio === 'string') {
+                authorBio = authorData.bio;
+              } else if (authorData.bio.value) {
+                authorBio = authorData.bio.value;
+              }
+            }
+            if (authorData.photos && authorData.photos.length > 0) {
+              authorAvatar = `https://covers.openlibrary.org/a/id/${authorData.photos[0]}-M.jpg`;
+            }
+            authorStats = `${(seed % 15) + 3} books · ${((seed * 3) % 20) + 1}k followers`;
+          }
+
+          const reviewsCount = Math.max(1, Math.floor(ratingsCount * (0.04 + (seed % 3) * 0.01)));
           const currentlyReadingCount = (seed * 11) % 5000 + 150;
           const wantToReadCount = (seed * 47) % 50000 + 1200;
 
@@ -252,7 +239,9 @@ export const BookDetails: React.FC = () => {
           setIsLoading(false);
         }
       } catch (err) {
-        console.error("Gagal sinkronisasi data dari Open Library API:", err);
+        if ((err as { name?: string })?.name !== 'AbortError') {
+          console.error("Gagal sinkronisasi data dari Open Library API:", err);
+        }
         const fallbackDetails = getRichBookDetail(selectedBook);
         if (active) {
           setRichDetail(fallbackDetails);
@@ -267,21 +256,13 @@ export const BookDetails: React.FC = () => {
       active = false;
       controller.abort();
     };
-  }, [selectedBook, readingProgress, currentUser]);
+  }, [selectedBook]);
 
   // Get current book state from user's library
   const libraryBook = richDetail ? books.find(b => b.title.toLowerCase() === richDetail.title.toLowerCase() && b.author.toLowerCase() === richDetail.author.toLowerCase()) : null;
   const progress = libraryBook ? readingProgress.find(p => p.userId === currentUser.id && p.bookId === libraryBook.id) : null;
   const currentShelf = progress ? progress.status : null; // 'WANT_TO_READ' | 'READING' | 'COMPLETED' | null
-
-  // Sync inputPage with progress
-  useEffect(() => {
-    if (progress) {
-      setInputPage(progress.currentPage);
-    } else {
-      setInputPage(0);
-    }
-  }, [progress]);
+  const displayedUserRating = userRating || resolveUserBookRating(progress);
 
   if (!selectedBook || !richDetail) {
     return (
@@ -304,7 +285,7 @@ export const BookDetails: React.FC = () => {
   const wantToReadCount = appProgressesForThisBook.filter(p => p.status === 'WANT_TO_READ').length;
   const completedCount = appProgressesForThisBook.filter(p => p.status === 'COMPLETED').length;
 
-  const handleShelfChange = (status: 'WANT_TO_READ' | 'READING' | 'COMPLETED') => {
+  const handleShelfChange = (status: 'WANT_TO_READ' | 'READING' | 'COMPLETED', ratingOverride?: number) => {
     let bookId = libraryBook?.id;
     if (!libraryBook) {
       // Add to library first
@@ -320,7 +301,7 @@ export const BookDetails: React.FC = () => {
 
     if (bookId) {
       const targetPage = status === 'COMPLETED' ? richDetail.totalPages : 0;
-      updateProgress(bookId, targetPage, status);
+      updateProgress(bookId, targetPage, status, ratingOverride);
     }
     setShowShelfDropdown(false);
   };
@@ -329,7 +310,7 @@ export const BookDetails: React.FC = () => {
     setAnimatingStar(rating);
     setUserRating(rating);
     // Mark as read/completed when rated
-    handleShelfChange('COMPLETED');
+    handleShelfChange('COMPLETED', rating);
     setTimeout(() => {
       setAnimatingStar(null);
     }, 450);
@@ -562,7 +543,7 @@ export const BookDetails: React.FC = () => {
                   onMouseEnter={() => setHoverRating(star)}
                   onMouseLeave={() => setHoverRating(0)}
                   className={`cursor-pointer transition-all hover:scale-120 duration-150 ${
-                    star <= (hoverRating || userRating) 
+                    star <= (hoverRating || displayedUserRating) 
                       ? "text-yellow-500 fill-current" 
                       : "text-gray-300"
                   } ${animatingStar === star ? 'animate-pop' : ''}`}
