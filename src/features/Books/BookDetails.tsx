@@ -413,7 +413,7 @@ export const BookDetails: React.FC = () => {
         className="flex items-center gap-2 mb-6 text-xs font-bold text-text-slate-dark hover:text-brand-orange cursor-pointer transition-colors border border-border-light-gray bg-white py-2 px-4 rounded-full shadow-2xs hover:shadow-xs hover:border-brand-orange/30 transition-all active-pop hover-scale"
       >
         <ArrowLeft size={14} className="text-brand-orange" />
-        Kembali
+        {language === 'id' ? 'Kembali' : 'Back'}
       </button>
 
       {/* Main Grid Layout */}
@@ -447,7 +447,7 @@ export const BookDetails: React.FC = () => {
                 className={`flex-1 px-3 flex items-center justify-center gap-2 text-xs font-bold transition-colors border-none cursor-pointer ${
                   currentShelf 
                     ? 'bg-gray-100 text-text-slate-dark hover:bg-gray-200' 
-                    : 'bg-[#409d69] hover:bg-[#348055] text-white'
+                    : 'bg-brand-forest hover:bg-brand-forest-hover text-white'
                 }`}
               >
                 {currentShelf ? (
@@ -474,7 +474,7 @@ export const BookDetails: React.FC = () => {
                 className={`px-2 flex items-center justify-center border-l transition-colors cursor-pointer border-none ${
                   currentShelf 
                     ? 'bg-gray-100 hover:bg-gray-200 border-border-light-gray text-text-slate-medium' 
-                    : 'bg-[#409d69] hover:bg-[#348055] border-white/20 text-white'
+                    : 'bg-brand-forest hover:bg-brand-forest-hover border-white/20 text-white'
                 }`}
               >
                 <ChevronDown size={14} className={`transition-transform duration-200 ${showShelfDropdown ? 'rotate-180' : ''}`} />
@@ -799,7 +799,7 @@ export const BookDetails: React.FC = () => {
                         'success'
                       );
                     }}
-                    className={`px-5 py-1 text-xs font-bold rounded-full transition-colors cursor-pointer border-none shadow-3xs active-pop ${
+                    className={`px-5 py-1 text-xs font-bold rounded-full transition-colors cursor-pointer border-none shadow-xs active-pop ${
                       followedAuthors.includes(richDetail.author)
                         ? 'bg-brand-orange text-white hover:bg-brand-orange-hover'
                         : 'text-white bg-black hover:bg-neutral-800'
@@ -911,7 +911,7 @@ export const BookDetails: React.FC = () => {
                                 <div className={`p-2.5 rounded-2xl text-xs leading-relaxed ${
                                   isMe 
                                     ? 'bg-brand-orange text-white rounded-tr-none' 
-                                    : 'bg-white border border-border-light-gray text-text-slate-dark rounded-tl-none shadow-3xs'
+                                    : 'bg-white border border-border-light-gray text-text-slate-dark rounded-tl-none shadow-xs'
                                 }`}>
                                   {msg.content}
                                 </div>

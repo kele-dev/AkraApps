@@ -263,7 +263,7 @@ export const Feed: React.FC = () => {
                 type="button"
                 onClick={() => { setPostType('QUOTE'); setPhotoPreview(null); }}
                 className={`bg-transparent border-none font-bold text-xs cursor-pointer flex items-center gap-1.5 pb-1.5 border-b-2 transition-all ${
-                  postType === 'QUOTE' ? 'color-brand-orange border-brand-orange' : 'text-text-slate-medium border-transparent'
+                  postType === 'QUOTE' ? 'text-brand-orange border-brand-orange' : 'text-text-slate-medium border-transparent'
                 }`}
               >
                 <Quote size={14} />
@@ -273,7 +273,7 @@ export const Feed: React.FC = () => {
                 type="button"
                 onClick={() => { setPostType('THOUGHT'); setPhotoPreview(null); }}
                 className={`bg-transparent border-none font-bold text-xs cursor-pointer flex items-center gap-1.5 pb-1.5 border-b-2 transition-all ${
-                  postType === 'THOUGHT' ? 'color-brand-orange border-brand-orange' : 'text-text-slate-medium border-transparent'
+                  postType === 'THOUGHT' ? 'text-brand-orange border-brand-orange' : 'text-text-slate-medium border-transparent'
                 }`}
               >
                 <MessageSquare size={14} />
@@ -283,7 +283,7 @@ export const Feed: React.FC = () => {
                 type="button"
                 onClick={() => { setPostType('PHOTO'); setContent(''); }}
                 className={`bg-transparent border-none font-bold text-xs cursor-pointer flex items-center gap-1.5 pb-1.5 border-b-2 transition-all ${
-                  postType === 'PHOTO' ? 'color-brand-orange border-brand-orange' : 'text-text-slate-medium border-transparent'
+                  postType === 'PHOTO' ? 'text-brand-orange border-brand-orange' : 'text-text-slate-medium border-transparent'
                 }`}
               >
                 <Image size={14} />
@@ -353,7 +353,7 @@ export const Feed: React.FC = () => {
             ) : (
               <textarea
                 aria-label={postType === 'QUOTE' ? (language === 'id' ? 'Tulis kutipan' : 'Write quote') : (language === 'id' ? 'Tulis ulasan' : 'Write review')}
-                className="w-full bg-white text-text-slate-dark text-sm p-1 resize-vertical min-h-[60px] focus-visible:ring-2 focus-visible:ring-brand-orange/40 rounded"
+                className="w-full bg-white text-text-slate-dark text-sm p-1 resize-y min-h-[60px] focus-visible:ring-2 focus-visible:ring-brand-orange/40 rounded"
                 rows={2}
                 placeholder={
                   postType === 'QUOTE'
@@ -677,7 +677,7 @@ export const Feed: React.FC = () => {
                           updateProgress(postBook.id, 0, 'WANT_TO_READ');
                           setOpenShelfMenuPostId(null);
                         }}
-                        className="bg-[#403020] text-white rounded-l border-none px-3 py-1.5 text-[10px] font-extrabold hover:bg-[#504030] cursor-pointer flex items-center gap-1.5"
+                        className="bg-brand-cocoa text-white rounded-l border-none px-3 py-1.5 text-[10px] font-extrabold hover:bg-brand-cocoa-hover cursor-pointer flex items-center gap-1.5"
                       >
                         {translations[language].wantToRead}
                       </button>
@@ -685,7 +685,7 @@ export const Feed: React.FC = () => {
                         type="button"
                         aria-label={language === 'id' ? 'Pilih status rak buku' : 'Choose bookshelf status'}
                         onClick={() => setOpenShelfMenuPostId(openShelfMenuPostId === post.id ? null : post.id)}
-                        className="bg-[#403020] text-white rounded-r border-none border-l border-white/20 px-1.5 py-1.5 text-[10px] hover:bg-[#504030] cursor-pointer flex items-center justify-center"
+                        className="bg-brand-cocoa text-white rounded-r border-none border-l border-white/20 px-1.5 py-1.5 text-[10px] hover:bg-brand-cocoa-hover cursor-pointer flex items-center justify-center"
                       >
                         <ChevronDown size={10} />
                       </button>
@@ -929,7 +929,7 @@ export const Feed: React.FC = () => {
                       <img
                         src={item.book.coverImage}
                         alt={item.book.title}
-                        className="w-11 h-16 object-cover rounded-md border border-border-light-gray hover:opacity-85 transition-opacity shadow-3xs"
+                        className="w-11 h-16 object-cover rounded-md border border-border-light-gray hover:opacity-85 transition-opacity shadow-xs"
                       />
                     </button>
                     <div className="flex-1 min-w-0 flex flex-col gap-0.5">

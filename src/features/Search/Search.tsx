@@ -183,12 +183,12 @@ export const SearchPage: React.FC = () => {
   return (
     <div className="flex flex-col gap-6 max-w-[800px] mx-auto animate-fade-in text-text-slate-dark bg-white p-6 rounded-lg border border-border-light-gray shadow-xs">
       {/* Title */}
-      <h2 className="text-2xl font-serif text-[#382110] font-extrabold leading-none pb-2 border-b border-border-light-gray">
-        Search
+      <h2 className="text-2xl font-serif text-brand-espresso font-extrabold leading-none pb-2 border-b border-border-light-gray">
+        {language === 'id' ? 'Pencarian' : 'Search'}
       </h2>
 
       {/* Goodreads Search Container box */}
-      <div className="bg-[#f4f1ea] border border-[#e8e3d6] rounded p-4 flex flex-col gap-3">
+      <div className="bg-surface-parchment border border-border-parchment rounded p-4 flex flex-col gap-3">
         <form 
           onSubmit={(e) => {
             e.preventDefault();
@@ -200,7 +200,7 @@ export const SearchPage: React.FC = () => {
             type="text"
             aria-label={language === 'id' ? 'Cari berdasarkan judul, penulis, atau kata kunci' : 'Search by title, author, or keyword'}
             className="input-field flex-1 px-3 py-2 rounded border border-[#d6d0c0] bg-white text-sm text-text-slate-dark focus:border-brand-orange focus-visible:ring-2 focus-visible:ring-brand-orange/40"
-            placeholder="Cari berdasarkan judul, penulis, atau kata kunci..."
+            placeholder={language === 'id' ? 'Cari berdasarkan judul, penulis, atau kata kunci...' : 'Search by title, author, or keyword...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -388,7 +388,7 @@ export const SearchPage: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => handleAddToShelf(book, 'WANT_TO_READ')}
-                                  className="px-3 bg-[#409d69] hover:bg-[#348055] text-white border-none rounded-l cursor-pointer transition-colors shadow-2xs flex items-center justify-center font-bold"
+                                  className="px-3 bg-brand-forest hover:bg-brand-forest-hover text-white border-none rounded-l cursor-pointer transition-colors shadow-2xs flex items-center justify-center font-bold"
                                 >
                                   {translations[language].wantToRead}
                                 </button>
@@ -396,7 +396,7 @@ export const SearchPage: React.FC = () => {
                                   type="button"
                                   aria-label={language === 'id' ? `Pilih rak untuk ${book.title}` : `Select shelf for ${book.title}`}
                                   onClick={() => setActiveDropdownId(activeDropdownId === book.id ? null : book.id)}
-                                  className="px-1.5 bg-[#409d69] hover:bg-[#348055] text-white border-l border-white/20 rounded-r cursor-pointer transition-colors flex items-center justify-center"
+                                  className="px-1.5 bg-brand-forest hover:bg-brand-forest-hover text-white border-l border-white/20 rounded-r cursor-pointer transition-colors flex items-center justify-center"
                                 >
                                   <ChevronDown size={12} />
                                 </button>

@@ -287,11 +287,11 @@ export const Profile: React.FC = () => {
             <div className="flex gap-5 sm:gap-8 pt-2">
               <div className="flex flex-col items-center">
                 <span className="text-base sm:text-xl font-extrabold text-text-slate-dark leading-none">{totalBooks}</span>
-                <span className="text-[10px] text-text-slate-light font-semibold mt-0.5">Buku</span>
+                <span className="text-[10px] text-text-slate-light font-semibold mt-0.5">{language === 'id' ? 'Buku' : 'Books'}</span>
               </div>
               <div className="flex flex-col items-center">
                 <span className="text-base sm:text-xl font-extrabold text-text-slate-dark leading-none">{friendsCount}</span>
-                <span className="text-[10px] text-text-slate-light font-semibold mt-0.5">Teman</span>
+                <span className="text-[10px] text-text-slate-light font-semibold mt-0.5">{language === 'id' ? 'Teman' : 'Friends'}</span>
               </div>
               <div className="flex flex-col items-center">
                 <span className="text-base sm:text-xl font-extrabold text-text-slate-dark leading-none">{followingCount}</span>
@@ -1089,7 +1089,7 @@ export const Profile: React.FC = () => {
 
               <div className="p-5 flex flex-col gap-4">
                 <div className="flex gap-3 items-center">
-                  <img src={activeProgressBook.coverImage} alt="" className="w-10 h-14 object-cover rounded-md border border-border-light-gray shrink-0 shadow-3xs" />
+                  <img src={activeProgressBook.coverImage} alt="" className="w-10 h-14 object-cover rounded-md border border-border-light-gray shrink-0 shadow-xs" />
                   <div className="min-w-0">
                     <h4 className="text-[11px] font-bold text-text-slate-dark truncate">{activeProgressBook.title}</h4>
                     <p className="text-[10px] text-text-slate-medium">{activeProgressBook.author}</p>

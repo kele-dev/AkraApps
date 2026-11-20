@@ -172,7 +172,7 @@ export const Header: React.FC = () => {
                   setCurrentTab(link.id);
                   setViewedUser(null); // Reset profile viewing when switching tabs
                 }}
-                className={`background-transparent border-none text-sm cursor-pointer py-1 px-1 border-b-2 transition-all ${
+                className={`bg-transparent border-none text-sm cursor-pointer py-1 px-1 border-b-2 transition-all ${
                   currentTab === link.id 
                     ? 'text-text-slate-dark font-bold border-brand-orange' 
                     : 'text-text-slate-medium font-medium border-transparent hover:text-text-slate-dark'
@@ -414,13 +414,13 @@ export const Header: React.FC = () => {
                   <div className="absolute right-0 mt-2.5 w-80 bg-white border border-border-light-gray rounded-xl shadow-lg z-50 overflow-hidden animate-fade-in">
                     {/* Panel Header */}
                     <div className="flex justify-between items-center px-4 py-3 border-b border-border-light-gray bg-bg-light-gray">
-                      <h4 className="text-xs font-extrabold text-text-slate-dark">Notifikasi</h4>
+                      <h4 className="text-xs font-extrabold text-text-slate-dark">{language === 'id' ? 'Notifikasi' : 'Notifications'}</h4>
                       {unreadNotificationCount > 0 && (
                         <button
                           onClick={() => markAllNotificationsRead()}
                           className="text-[10px] font-bold text-brand-orange hover:text-brand-orange-hover bg-transparent border-none cursor-pointer"
                         >
-                          Tandai semua dibaca
+                          {language === 'id' ? 'Tandai semua dibaca' : 'Mark all read'}
                         </button>
                       )}
                     </div>
@@ -428,7 +428,9 @@ export const Header: React.FC = () => {
                     {/* Notification List */}
                     <div className="flex flex-col max-h-80 overflow-y-auto divide-y divide-border-light-gray/50">
                       {notifications.length === 0 ? (
-                        <p className="text-center text-xs text-text-slate-light py-8 font-medium">Tidak ada notifikasi baru.</p>
+                        <p className="text-center text-xs text-text-slate-light py-8 font-medium">
+                          {language === 'id' ? 'Tidak ada notifikasi baru.' : 'No new notifications.'}
+                        </p>
                       ) : (
                         notifications.slice(0, 8).map((notif) => {
                           const notifIcon = {
@@ -494,7 +496,7 @@ export const Header: React.FC = () => {
                         }}
                         className="text-[11px] font-bold text-brand-orange hover:text-brand-orange-hover bg-transparent border-none cursor-pointer"
                       >
-                        Lihat semua aktivitas →
+                        {language === 'id' ? 'Lihat semua aktivitas →' : 'View all activity →'}
                       </button>
                     </div>
                   </div>
@@ -613,7 +615,7 @@ export const Header: React.FC = () => {
               onClick={loginWithGoogle}
               className="btn-primary flex items-center gap-1.5 text-xs py-1.5 px-4 rounded-full font-bold cursor-pointer"
             >
-              Masuk dengan Google
+              {language === 'id' ? 'Masuk dengan Google' : 'Sign in with Google'}
             </button>
           )}
         </div>

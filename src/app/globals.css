@@ -12,6 +12,14 @@
   
   --color-brand-green: #388e3c;
   --color-brand-green-glow: rgba(56, 142, 60, 0.08);
+  --color-brand-forest: #409d69;
+  --color-brand-forest-hover: #348055;
+  --color-brand-cocoa: #403020;
+  --color-brand-cocoa-hover: #504030;
+  --color-brand-espresso: #382110;
+  --color-ink-strong: #181818;
+  --color-surface-parchment: #f4f1ea;
+  --color-border-parchment: #e8e3d6;
   
   --color-bg-light-gray: #f8f9fa;
   --color-border-light-gray: #e9ecef;
