@@ -158,10 +158,16 @@ h1, h2, h3, h4, h5, h6 {
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.input-field:focus {
+.input-field:focus-visible {
   border-color: var(--color-brand-orange);
   box-shadow: 0 0 0 3px var(--color-brand-orange-glow);
-  outline: none;
+  outline: 2px solid var(--color-brand-orange);
+  outline-offset: 1px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand-orange);
+  outline-offset: 2px;
 }
 
 /* Custom premium hover and animation effects */

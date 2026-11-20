@@ -198,7 +198,7 @@ export const SearchPage: React.FC = () => {
         >
           <input
             type="text"
-            className="input-field flex-1 px-3 py-2 rounded border border-[#d6d0c0] bg-white text-sm focus:outline-none text-text-slate-dark focus:border-brand-orange"
+            className="input-field flex-1 px-3 py-2 rounded border border-[#d6d0c0] bg-white text-sm text-text-slate-dark focus:border-brand-orange focus-visible:ring-2 focus-visible:ring-brand-orange/40"
             placeholder="Cari berdasarkan judul, penulis, atau kata kunci..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}

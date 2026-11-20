@@ -296,7 +296,7 @@ export const Books: React.FC = () => {
                           onChange={(e) => setLogPage(parseInt(e.target.value) || 0)}
                           max={book.totalPages}
                           min={0}
-                          className="w-12 bg-white text-text-slate-dark border border-border-light-gray rounded-md p-1 text-center font-bold focus:outline-none"
+                          className="w-12 bg-white text-text-slate-dark border border-border-light-gray rounded-md p-1 text-center font-bold focus-visible:ring-2 focus-visible:ring-brand-orange/40"
                         />
                         <span className="text-text-slate-light">/ {book.totalPages}</span>
                       </div>

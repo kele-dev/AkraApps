@@ -316,7 +316,7 @@ export const Feed: React.FC = () => {
                   onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoChange(f); e.target.value = ''; }}
                 />
                 <textarea
-                  className="w-full bg-white text-text-slate-dark text-sm p-1 resize-none min-h-[50px] focus:outline-none"
+                  className="w-full bg-white text-text-slate-dark text-sm p-1 resize-none min-h-[50px] focus-visible:ring-2 focus-visible:ring-brand-orange/40 rounded"
                   rows={2}
                   placeholder={language === 'id' ? 'Tambah keterangan foto... (opsional)' : 'Add photo caption... (optional)'}
                   value={content}
@@ -325,7 +325,7 @@ export const Feed: React.FC = () => {
               </div>
             ) : (
               <textarea
-                className="w-full bg-white text-text-slate-dark text-sm p-1 resize-vertical min-h-[60px] focus:outline-none"
+                className="w-full bg-white text-text-slate-dark text-sm p-1 resize-vertical min-h-[60px] focus-visible:ring-2 focus-visible:ring-brand-orange/40 rounded"
                 rows={2}
                 placeholder={
                   postType === 'QUOTE'
@@ -342,7 +342,7 @@ export const Feed: React.FC = () => {
               <div className="flex items-center gap-1.5 flex-1 min-w-[180px]">
                 <Bookmark size={16} className="text-text-slate-light" />
                 <select
-                  className="w-full bg-bg-light-gray text-text-slate-dark text-xs p-1.5 rounded-md border border-transparent focus:outline-none"
+                  className="w-full bg-bg-light-gray text-text-slate-dark text-xs p-1.5 rounded-md border border-transparent focus-visible:ring-2 focus-visible:ring-brand-orange/40"
                   value={selectedBookId}
                   onChange={(e) => setSelectedBookId(e.target.value)}
                 >
@@ -612,7 +612,7 @@ export const Feed: React.FC = () => {
                   <div className="flex-1 relative">
                     <input
                       type="text"
-                      className="input-field w-full pr-9 text-xs bg-white border border-border-light-gray rounded-md h-8 focus:outline-none focus:border-brand-orange transition-all"
+                      className="input-field w-full pr-9 text-xs bg-white border border-border-light-gray rounded-md h-8 focus-visible:ring-2 focus-visible:ring-brand-orange/40 focus:border-brand-orange transition-all"
                       placeholder="Tulis komentar..."
                       value={commentInputs[post.id] || ''}
                       onChange={(e) => setCommentInputs({ ...commentInputs, [post.id]: e.target.value })}
@@ -680,7 +680,7 @@ export const Feed: React.FC = () => {
                             type="number"
                             value={logPage}
                             onChange={(e) => setLogPage(parseInt(e.target.value) || 0)}
-                            className="w-11 text-xs p-1 border border-border-light-gray rounded-md bg-white text-center focus:outline-none"
+                            className="w-11 text-xs p-1 border border-border-light-gray rounded-md bg-white text-center focus-visible:ring-2 focus-visible:ring-brand-orange/40"
                           />
                           <span className="text-[10px] text-text-slate-light">/ {book.totalPages}</span>
                           <button 
@@ -964,7 +964,7 @@ export const Feed: React.FC = () => {
               <div>
                 <label className="block text-xs font-semibold text-text-slate-medium mb-1.5">{language === 'id' ? 'Apa yang ingin Anda bagikan?' : 'What do you want to share?'}</label>
                 <textarea
-                  className="input-field w-full px-3 py-2 text-xs focus:outline-none resize-none"
+                  className="input-field w-full px-3 py-2 text-xs resize-none focus-visible:ring-2 focus-visible:ring-brand-orange/40"
                   rows={4}
                   maxLength={120}
                   placeholder={language === 'id' ? 'Tulis kutipan favorit atau progres membaca hari ini (maks 120 karakter)...' : 'Write your favorite quote or reading progress today (max 120 characters)...'}
@@ -980,7 +980,7 @@ export const Feed: React.FC = () => {
               <div>
                 <label className="block text-xs font-semibold text-text-slate-medium mb-1.5">{language === 'id' ? 'Hubungkan ke Buku (Opsional)' : 'Connect to Book (Optional)'}</label>
                 <select
-                  className="input-field w-full px-3 py-2 text-xs focus:outline-none"
+                  className="input-field w-full px-3 py-2 text-xs focus-visible:ring-2 focus-visible:ring-brand-orange/40"
                   value={storyBookTitle}
                   onChange={(e) => setStoryBookTitle(e.target.value)}
                 >

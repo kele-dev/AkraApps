@@ -514,7 +514,7 @@ export const BookDetails: React.FC = () => {
                       const val = parseInt(e.target.value);
                       setInputPage(isNaN(val) ? 0 : val);
                     }}
-                    className="w-full text-xs font-bold text-text-slate-dark text-center focus:outline-none border-none bg-transparent"
+                    className="w-full text-xs font-bold text-text-slate-dark text-center border-none bg-transparent focus-visible:ring-2 focus-visible:ring-brand-orange/40 rounded"
                   />
                   <span className="text-[10px] text-text-slate-light font-bold shrink-0">/ {richDetail.totalPages || 200} {translations[language].pagesOf}</span>
                 </div>
@@ -902,7 +902,7 @@ export const BookDetails: React.FC = () => {
                         placeholder="Tulis pesan diskusi di sini..."
                         value={buddyMessageText}
                         onChange={(e) => setBuddyMessageText(e.target.value)}
-                        className="flex-1 input-field py-1.5 px-3 text-xs focus:outline-none bg-white rounded-lg h-9"
+                        className="flex-1 input-field py-1.5 px-3 text-xs bg-white rounded-lg h-9 focus-visible:ring-2 focus-visible:ring-brand-orange/40"
                       />
                       <button
                         type="submit"

@@ -188,7 +188,7 @@ export const Header: React.FC = () => {
           />
           <input
             type="text"
-            className="input-field w-full pl-9 rounded-full h-8.5 text-xs bg-gray-100 border border-transparent py-1.5 focus:outline-none focus:border-brand-orange focus:bg-white transition-all"
+            className="input-field w-full pl-9 rounded-full h-8.5 text-xs bg-gray-100 border border-transparent py-1.5 focus-visible:ring-2 focus-visible:ring-brand-orange/35 focus:border-brand-orange focus:bg-white transition-all"
             placeholder={language === 'id' ? "Cari buku, kutipan, atau teman..." : "Search books, quotes, or friends..."}
             value={localSearch}
             onChange={(e) => {
