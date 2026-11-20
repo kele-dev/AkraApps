@@ -8,6 +8,7 @@ import { collection, doc, setDoc, getDoc, getDocs, query, where, limit, deleteDo
 import { canDeletePost, filterOwnedRecordsForSync, FIRESTORE_QUERY_LIMITS } from '../lib/firestoreSync';
 import { computeProgressTransition } from '../lib/progressUtils';
 import { safeStorageGet, safeStorageRemove, safeStorageSet } from '../lib/storage';
+import { clampGoalTarget, createUniqueId } from '../lib/idAndMath';
 
 // Helper to recursively clean undefined values for Firestore
 const cleanUndefined = (obj: any): any => {
@@ -487,6 +488,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         page,
         status,
         rating,
+        idFactory: () => createUniqueId('p'),
       });
 
     setReadingProgress(nextProgressList);
@@ -535,7 +537,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const book = books.find((b) => b.id === bookId);
     const newPost: Post = {
-      id: `post_${Date.now()}`,
+      id: createUniqueId('post'),
       userId: currentUser.id,
       userDisplayName: currentUser.displayName,
       userAvatar: currentUser.avatar,
@@ -591,7 +593,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!commentContent.trim()) return;
 
     const newComment: Comment = {
-      id: `comment_${Date.now()}`,
+      id: createUniqueId('comment'),
       userId: currentUser.id,
       displayName: currentUser.displayName,
       avatar: currentUser.avatar,
@@ -615,20 +617,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const setGoal = (targetBooks: number) => {
     if (currentUser.id === 'guest') return;
 
+    const safeTargetBooks = clampGoalTarget(targetBooks);
     const currentYear = new Date().getFullYear();
     setGoals((prev) => {
       const existingIdx = prev.findIndex((g) => g.userId === currentUser.id && g.year === currentYear);
-      let newGoals = [...prev];
+      const newGoals = [...prev];
       if (existingIdx > -1) {
         newGoals[existingIdx] = {
           ...newGoals[existingIdx],
-          targetBooks,
+          targetBooks: safeTargetBooks,
         };
       } else {
         newGoals.push({
           userId: currentUser.id,
           year: currentYear,
-          targetBooks,
+          targetBooks: safeTargetBooks,
           completedBooksCount: 0,
         });
       }
@@ -640,7 +643,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentUser.id === 'guest') return undefined;
 
     const newBook: Book = {
-      id: `b_${Date.now()}`,
+      id: createUniqueId('b'),
       title,
       author,
       coverImage: coverImage || 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=300&q=80',
@@ -654,7 +657,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addStory = (content: string, bookTitle?: string) => {
     if (currentUser.id === 'guest') return;
     const newStory: Story = {
-      id: `story_${Date.now()}`,
+      id: createUniqueId('story'),
       userId: currentUser.id,
       userDisplayName: currentUser.displayName,
       userAvatar: currentUser.avatar,
@@ -680,7 +683,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addShelf = (name: string) => {
     if (currentUser.id === 'guest') return;
     const newShelf: Shelf = {
-      id: `shelf_${Date.now()}`,
+      id: createUniqueId('shelf'),
       userId: currentUser.id,
       name,
       bookIds: []
@@ -714,7 +717,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (exists) return;
 
     const newBuddyRead: BuddyRead = {
-      id: `br_${Date.now()}`,
+      id: createUniqueId('br'),
       userIds: [currentUser.id, buddyUserId],
       bookId,
       createdAt: new Date().toISOString()
@@ -727,7 +730,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentUser.id === 'guest' || !content.trim()) return;
     
     const newMessage: BuddyMessage = {
-      id: `bm_${Date.now()}`,
+      id: createUniqueId('bm'),
       buddyReadId,
       userId: currentUser.id,
       userDisplayName: currentUser.displayName,

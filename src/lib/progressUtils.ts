@@ -27,7 +27,10 @@ export function computeProgressTransition({
   page,
   status,
   rating,
-  idFactory = () => `p_${Date.now()}`,
+  idFactory = () =>
+    typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.randomUUID === 'function'
+      ? `p_${globalThis.crypto.randomUUID()}`
+      : `p_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
   nowIso = () => new Date().toISOString(),
 }: ProgressTransitionInput): ProgressTransitionResult {
   const existingIdx = prevProgress.findIndex(

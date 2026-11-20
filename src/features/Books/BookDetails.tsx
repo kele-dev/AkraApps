@@ -5,6 +5,7 @@ import { useApp, translations } from '../../context/AppContext';
 import { getRichBookDetail, RichBookDetail, RICH_BOOK_DATABASE } from './bookDetailsData';
 import { ArrowLeft, Star, Share2, ChevronDown, ChevronUp, Pen, Check } from 'lucide-react';
 import { ProgressBar } from '../../components/ProgressBar';
+import { computePercent } from '../../lib/idAndMath';
 
 export const BookDetails: React.FC = () => {
   const { 
@@ -811,11 +812,11 @@ export const BookDetails: React.FC = () => {
 
               const myProgress = readingProgress.find(p => p.userId === currentUser.id && p.bookId === bookIdForBuddy);
               const myPage = myProgress ? myProgress.currentPage : 0;
-              const myPercent = Math.round((myPage / selectedBook.totalPages) * 100) || 0;
+              const myPercent = computePercent(myPage, selectedBook.totalPages);
 
               const buddyProgress = readingProgress.find(p => p.userId === buddyUserId && p.bookId === bookIdForBuddy);
               const buddyPage = buddyProgress ? buddyProgress.currentPage : 0;
-              const buddyPercent = Math.round((buddyPage / selectedBook.totalPages) * 100) || 0;
+              const buddyPercent = computePercent(buddyPage, selectedBook.totalPages);
 
               const messages = buddyMessages.filter(m => m.buddyReadId === activeBuddyRead.id);
 

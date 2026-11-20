@@ -5,6 +5,7 @@ import { useApp, translations } from '../../context/AppContext';
 import { Card } from '../../components/Card';
 import { MessageSquare, Bookmark, Quote, BookOpen, Send, Star, ChevronDown, Check, Image, X, Heart } from 'lucide-react';
 import { compressImageFileToDataUrl } from '../../lib/storage';
+import { computePercent } from '../../lib/idAndMath';
 
 export const Feed: React.FC = () => {
   const { 
@@ -812,7 +813,7 @@ export const Feed: React.FC = () => {
                 <div 
                   className="h-full bg-brand-orange" 
                   style={{ 
-                    width: `${Math.min(100, Math.round((userGoal.completedBooksCount / userGoal.targetBooks) * 100))}%` 
+                    width: `${computePercent(userGoal.completedBooksCount, userGoal.targetBooks)}%` 
                   }} 
                 />
               </div>

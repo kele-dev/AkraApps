@@ -11,6 +11,7 @@ import {
   Quote, BookMarked, BarChart2
 } from 'lucide-react';
 import type { Book, Shelf, Post } from '../../types';
+import { computePercent } from '../../lib/idAndMath';
 
 const PRESET_AVATARS = [
   'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80',
@@ -140,7 +141,7 @@ export const Profile: React.FC = () => {
   const userQuotes = userPosts.filter(p => p.type === 'QUOTE');
 
   // Stats
-  const completionPercentage = Math.round((completedBooks.length / userGoal.targetBooks) * 100) || 0;
+  const completionPercentage = computePercent(completedBooks.length, userGoal.targetBooks);
   const remainingBooks = Math.max(0, userGoal.targetBooks - completedBooks.length);
 
   // Social counts
@@ -429,7 +430,7 @@ export const Profile: React.FC = () => {
                 <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
                   {readingBooks.map((book) => {
                     const progress = userProgress.find((p) => p.bookId === book.id);
-                    const percent = Math.round(((progress?.currentPage || 0) / book.totalPages) * 100) || 0;
+                    const percent = computePercent(progress?.currentPage || 0, book.totalPages);
                     return (
                       <div key={book.id} className="flex flex-col gap-2 min-w-[90px] max-w-[90px] shrink-0 group cursor-pointer"
                         onClick={() => viewBookDetails(book)}>
