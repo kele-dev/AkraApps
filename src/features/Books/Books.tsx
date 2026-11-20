@@ -357,21 +357,30 @@ export const Books: React.FC = () => {
               
               {/* Top info: Cover and text */}
               <div className="flex gap-4 mb-5">
-                <img
-                  src={book.coverImage}
-                  alt={book.title}
+                <button
+                  type="button"
                   onClick={() => viewBookDetails(book)}
-                  className="w-20 h-28 object-cover rounded-md shadow-xs border border-border-light-gray cursor-pointer hover:opacity-85 transition-opacity"
-                />
+                  aria-label={book.title}
+                  className="p-0 border-none bg-transparent cursor-pointer shrink-0 rounded-md"
+                >
+                  <img
+                    src={book.coverImage}
+                    alt={book.title}
+                    className="w-20 h-28 object-cover rounded-md shadow-xs border border-border-light-gray hover:opacity-85 transition-opacity"
+                  />
+                </button>
                 <div className="flex-1 min-w-0 flex flex-col justify-start">
                   <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded-md text-text-slate-medium uppercase font-extrabold inline-block mb-1.5 self-start">
                     {book.category || 'Umum'}
                   </span>
-                  <h4 
-                    onClick={() => viewBookDetails(book)}
-                    className="text-sm font-bold text-text-slate-dark mb-0.5 truncate cursor-pointer hover:text-brand-orange hover:underline"
-                  >
-                    {book.title}
+                  <h4 className="text-sm font-bold text-text-slate-dark mb-0.5 truncate">
+                    <button
+                      type="button"
+                      onClick={() => viewBookDetails(book)}
+                      className="text-left bg-transparent border-none p-0 font-bold text-text-slate-dark truncate w-full cursor-pointer hover:text-brand-orange hover:underline"
+                    >
+                      {book.title}
+                    </button>
                   </h4>
                   <p className="text-xs text-text-slate-medium mb-3 truncate">
                     {book.author}

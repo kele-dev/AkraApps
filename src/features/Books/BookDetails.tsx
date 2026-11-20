@@ -537,20 +537,26 @@ export const BookDetails: React.FC = () => {
 
           {/* Rate this Book Stars */}
           <div className="flex flex-col items-center w-full gap-1.5 mt-1 border-t border-border-light-gray/60 pt-4 select-none">
-            <div className="flex text-gray-200">
+            <div className="flex text-gray-200" role="radiogroup" aria-label={translations[language].rateThisBook}>
               {[1, 2, 3, 4, 5].map((star) => (
-                <Star
+                <button
                   key={star}
-                  size={20}
+                  type="button"
                   onClick={() => handleRateBook(star)}
                   onMouseEnter={() => setHoverRating(star)}
                   onMouseLeave={() => setHoverRating(0)}
-                  className={`cursor-pointer transition-all hover:scale-120 duration-150 ${
-                    star <= (hoverRating || displayedUserRating) 
-                      ? "text-yellow-500 fill-current" 
-                      : "text-gray-300"
-                  } ${animatingStar === star ? 'animate-pop' : ''}`}
-                />
+                  aria-label={`${star} ${language === 'id' ? 'bintang' : 'stars'}`}
+                  className="bg-transparent border-none p-0.5 cursor-pointer"
+                >
+                  <Star
+                    size={20}
+                    className={`transition-all hover:scale-120 duration-150 ${
+                      star <= (hoverRating || displayedUserRating) 
+                        ? "text-yellow-500 fill-current" 
+                        : "text-gray-300"
+                    } ${animatingStar === star ? 'animate-pop' : ''}`}
+                  />
+                </button>
               ))}
             </div>
             <span className="text-[11px] text-text-slate-medium font-medium">{translations[language].rateThisBook}</span>
@@ -997,14 +1003,15 @@ export const BookDetails: React.FC = () => {
             </h3>
             <div className="flex gap-4 overflow-x-auto pb-3 scrollbar-none snap-x snap-mandatory">
               {allSimilar.map((book, idx) => (
-                <div
+                <button
+                  type="button"
                   key={book.id || idx}
                   onClick={() => {
                     // If it's a real library book, navigate to it
                     const realBook = books.find(b => b.id === book.id);
                     if (realBook) viewBookDetails(realBook);
                   }}
-                  className="flex flex-col gap-2 min-w-[110px] max-w-[110px] shrink-0 snap-start cursor-pointer group"
+                  className="text-left bg-transparent border-none p-0 flex flex-col gap-2 min-w-[110px] max-w-[110px] shrink-0 snap-start cursor-pointer group"
                 >
                   <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden border border-border-light-gray shadow-2xs group-hover:shadow-sm transition-all bg-gray-50">
                     <img
@@ -1027,7 +1034,7 @@ export const BookDetails: React.FC = () => {
                       {book.category}
                     </span>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>

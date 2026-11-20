@@ -310,21 +310,30 @@ export const SearchPage: React.FC = () => {
                   return (
                     <div key={book.id} className="py-4 flex gap-4 items-start first:pt-0">
                       {/* Left: Book Cover */}
-                      <img
-                        src={book.coverImage}
-                        alt={book.title}
+                      <button
+                        type="button"
                         onClick={() => viewBookDetails(book)}
-                        className="w-16 h-22 object-cover rounded shadow-xs border border-border-light-gray shrink-0 bg-gray-50 cursor-pointer hover:opacity-85 transition-opacity"
-                      />
+                        aria-label={book.title}
+                        className="p-0 border-none bg-transparent cursor-pointer shrink-0 rounded"
+                      >
+                        <img
+                          src={book.coverImage}
+                          alt={book.title}
+                          className="w-16 h-22 object-cover rounded shadow-xs border border-border-light-gray bg-gray-50 hover:opacity-85 transition-opacity"
+                        />
+                      </button>
 
                       {/* Right: Book Details */}
                       <div className="flex-1 min-w-0 flex flex-col gap-1">
                         {/* Title */}
-                        <h4 
-                          onClick={() => viewBookDetails(book)}
-                          className="text-sm font-bold text-text-slate-dark hover:underline cursor-pointer font-serif leading-snug"
-                        >
-                          {book.title}
+                        <h4 className="text-sm font-bold text-text-slate-dark font-serif leading-snug">
+                          <button
+                            type="button"
+                            onClick={() => viewBookDetails(book)}
+                            className="text-left bg-transparent border-none p-0 font-bold text-text-slate-dark hover:underline cursor-pointer font-serif"
+                          >
+                            {book.title}
+                          </button>
                         </h4>
 
                         {/* Author */}
@@ -416,18 +425,24 @@ export const SearchPage: React.FC = () => {
                           {/* Rate this book stars */}
                           <div className="flex items-center gap-1 text-[10px] text-text-slate-medium select-none ml-1">
                             <span className="shrink-0">{translations[language].rateThisBook}:</span>
-                            <div className="flex text-gray-300">
+                            <div className="flex text-yellow-500" role="radiogroup" aria-label={translations[language].rateThisBook}>
                               {[1, 2, 3, 4, 5].map((star) => (
-                                <Star
+                                <button
                                   key={star}
-                                  size={12}
+                                  type="button"
                                   onClick={() => handleRateBook(book, star)}
-                                  className={`cursor-pointer transition-colors ${
-                                    star <= userRating 
-                                      ? "text-yellow-500 fill-current" 
-                                      : "hover:text-yellow-400"
-                                  }`}
-                                />
+                                  aria-label={`${star} ${language === 'id' ? 'bintang' : 'stars'}`}
+                                  className="bg-transparent border-none p-0.5 cursor-pointer text-gray-300"
+                                >
+                                  <Star
+                                    size={12}
+                                    className={`transition-colors ${
+                                      star <= userRating 
+                                        ? "text-yellow-500 fill-current" 
+                                        : "hover:text-yellow-400"
+                                    }`}
+                                  />
+                                </button>
                               ))}
                             </div>
                           </div>

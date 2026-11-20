@@ -206,16 +206,21 @@ export const Feed: React.FC = () => {
           
           {/* Add story button for Current User */}
           <div className="flex flex-col items-center gap-1.5 shrink-0">
-            <div className="relative w-15 h-15 cursor-pointer active-pop hover-scale" onClick={() => setShowCreateStory(true)}>
+            <button
+              type="button"
+              onClick={() => setShowCreateStory(true)}
+              aria-label={language === 'id' ? 'Buat cerita baru' : 'Create new story'}
+              className="relative w-15 h-15 cursor-pointer active-pop hover-scale bg-transparent border-none p-0 rounded-full"
+            >
               <img
                 src={currentUser.avatar}
                 alt={currentUser.displayName}
                 className="w-full h-full rounded-full object-cover border-2 border-white ring-2 ring-gray-200"
               />
-              <div className="absolute right-0 bottom-0 bg-brand-orange text-white w-5 h-5 rounded-full flex items-center justify-center font-bold text-sm border-2 border-white shadow-2xs">
+              <span className="absolute right-0 bottom-0 bg-brand-orange text-white w-5 h-5 rounded-full flex items-center justify-center font-bold text-sm border-2 border-white shadow-2xs" aria-hidden="true">
                 +
-              </div>
-            </div>
+              </span>
+            </button>
             <span className="text-[10px] text-text-slate-medium font-semibold">{language === 'id' ? 'Cerita Anda' : 'Your Story'}</span>
           </div>
 
@@ -224,19 +229,21 @@ export const Feed: React.FC = () => {
             const isOwn = story.userId === currentUser.id;
             return (
               <div key={story.id} className="flex flex-col items-center gap-1.5 shrink-0">
-                <div 
+                <button
+                  type="button"
                   onClick={() => {
                     setActiveStoryUserId(story.userId);
                     setActiveStoryIndex(0);
                   }}
-                  className="w-15 h-15 rounded-full p-[2.5px] cursor-pointer active-pop hover-scale bg-gradient-to-tr from-brand-orange via-rose-500 to-amber-400"
+                  aria-label={isOwn ? (language === 'id' ? 'Lihat cerita Anda' : 'View your story') : `${story.userDisplayName}`}
+                  className="w-15 h-15 rounded-full p-[2.5px] cursor-pointer active-pop hover-scale border-none bg-gradient-to-tr from-brand-orange via-rose-500 to-amber-400"
                 >
                   <img
                     src={story.userAvatar}
                     alt={story.userDisplayName}
                     className="w-full h-full rounded-full object-cover border-2 border-white"
                   />
-                </div>
+                </button>
                 <span className="text-[10px] text-text-slate-medium font-semibold truncate max-w-[70px]">
                   {isOwn ? (language === 'id' ? 'Cerita Anda' : 'Your Story') : story.userDisplayName}
                 </span>
@@ -298,7 +305,8 @@ export const Feed: React.FC = () => {
                     </button>
                   </div>
                 ) : (
-                  <div
+                  <button
+                    type="button"
                     onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
                     onDragLeave={() => setIsDragging(false)}
                     onDrop={e => {
@@ -308,7 +316,7 @@ export const Feed: React.FC = () => {
                       if (file) handlePhotoChange(file);
                     }}
                     onClick={() => photoInputRef.current?.click()}
-                    className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-xl py-10 cursor-pointer transition-all ${
+                    className={`w-full bg-transparent flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-xl py-10 cursor-pointer transition-all ${
                       isDragging 
                         ? 'border-brand-orange bg-brand-orange/5' 
                         : 'border-border-light-gray hover:border-brand-orange/50 hover:bg-gray-50'
@@ -321,7 +329,7 @@ export const Feed: React.FC = () => {
                       <p className="text-xs font-bold text-text-slate-dark">{language === 'id' ? 'Klik atau seret foto di sini' : 'Click or drag photo here'}</p>
                       <p className="text-[11px] text-text-slate-light mt-0.5">JPG, PNG, GIF • Max 5MB</p>
                     </div>
-                  </div>
+                  </button>
                 )}
                 <input
                   ref={photoInputRef}
@@ -429,20 +437,27 @@ export const Feed: React.FC = () => {
               
               {/* Header: User Profile, Activity, Time */}
               <div className="flex gap-3 items-start">
-                <img
-                  src={post.userAvatar}
-                  alt={post.userDisplayName}
+                <button
+                  type="button"
                   onClick={() => handleUserClick(post.userId, post.userDisplayName, post.userAvatar)}
-                  className="w-9 h-9 rounded-full object-cover cursor-pointer hover:opacity-80 transition-opacity"
-                />
+                  aria-label={post.userDisplayName}
+                  className="p-0 border-none bg-transparent cursor-pointer rounded-full shrink-0"
+                >
+                  <img
+                    src={post.userAvatar}
+                    alt={post.userDisplayName}
+                    className="w-9 h-9 rounded-full object-cover hover:opacity-80 transition-opacity"
+                  />
+                </button>
                 <div className="flex-1">
                   <div className="text-sm text-text-slate-dark leading-relaxed">
-                    <strong 
+                    <button
+                      type="button"
                       onClick={() => handleUserClick(post.userId, post.userDisplayName, post.userAvatar)}
-                      className="font-bold cursor-pointer hover:text-brand-orange hover:underline transition-all"
+                      className="bg-transparent border-none p-0 font-bold text-text-slate-dark cursor-pointer hover:text-brand-orange hover:underline transition-all"
                     >
                       {post.userDisplayName}
-                    </strong>{' '}
+                    </button>{' '}
                     {post.type === 'PROGRESS_UPDATE' ? (
                       post.currentPage && post.totalPages && post.currentPage === post.totalPages ? (
                         <span>{language === 'id' ? 'menyelesaikan membaca' : 'finished reading'} <strong className="font-semibold">{post.bookTitle}</strong></span>
@@ -481,18 +496,27 @@ export const Feed: React.FC = () => {
               {/* Connected Book Detail Box */}
               {postBook && (
                 <div className="flex gap-4 p-4 rounded-md bg-[#fafbfc] border border-border-light-gray">
-                  <img
-                    src={postBook.coverImage}
-                    alt={postBook.title}
+                  <button
+                    type="button"
                     onClick={() => viewBookDetails(postBook)}
-                    className="w-15 h-20 object-cover rounded-md border border-border-light-gray cursor-pointer hover:opacity-85 transition-opacity"
-                  />
+                    aria-label={postBook.title}
+                    className="p-0 border-none bg-transparent cursor-pointer shrink-0 rounded-md"
+                  >
+                    <img
+                      src={postBook.coverImage}
+                      alt={postBook.title}
+                      className="w-15 h-20 object-cover rounded-md border border-border-light-gray hover:opacity-85 transition-opacity"
+                    />
+                  </button>
                   <div className="flex-1 flex flex-col gap-1">
-                    <h4 
-                      onClick={() => viewBookDetails(postBook)}
-                      className="text-sm font-bold text-text-slate-dark leading-snug cursor-pointer hover:text-brand-orange hover:underline"
-                    >
-                      {postBook.title}
+                    <h4 className="text-sm font-bold text-text-slate-dark leading-snug">
+                      <button
+                        type="button"
+                        onClick={() => viewBookDetails(postBook)}
+                        className="text-left bg-transparent border-none p-0 font-bold text-text-slate-dark cursor-pointer hover:text-brand-orange hover:underline"
+                      >
+                        {postBook.title}
+                      </button>
                     </h4>
                     <p className="text-xs text-text-slate-medium">
                       {language === 'id' ? 'oleh' : 'by'} {postBook.author}
@@ -587,13 +611,14 @@ export const Feed: React.FC = () => {
                   {/* Rating Display */}
                   <div className="flex items-center gap-1.5">
                     <span className="text-text-slate-light text-[10px]">{translations[language].rateIt}</span>
-                    <div className="flex gap-0.5">
+                    <div className="flex gap-0.5" role="radiogroup" aria-label={translations[language].rateIt}>
                       {(() => {
                         const currentRating = post.rating || (post.bookId ? (readingProgress.find(p => p.userId === currentUser.id && p.bookId === post.bookId)?.rating || 0) : 0);
                         return [1, 2, 3, 4, 5].map((star) => (
-                          <Star 
-                            key={star} 
-                            size={14} 
+                          <button
+                            key={star}
+                            type="button"
+                            aria-label={`${star} ${language === 'id' ? 'bintang' : 'stars'}`}
                             onClick={() => {
                               if (post.bookId) {
                                 const prog = readingProgress.find(p => p.userId === currentUser.id && p.bookId === post.bookId);
@@ -602,12 +627,17 @@ export const Feed: React.FC = () => {
                                 updateProgress(post.bookId, currentPage, status, star);
                               }
                             }}
-                            className={`cursor-pointer hover:scale-115 transition-transform ${
-                              star <= currentRating
-                                ? "text-yellow-500 fill-current" 
-                                : "text-gray-300 fill-none"
-                            }`} 
-                          />
+                            className="bg-transparent border-none p-0.5 cursor-pointer"
+                          >
+                            <Star 
+                              size={14} 
+                              className={`hover:scale-115 transition-transform ${
+                                star <= currentRating
+                                  ? "text-yellow-500 fill-current" 
+                                  : "text-gray-300 fill-none"
+                              }`} 
+                            />
+                          </button>
                         ));
                       })()}
                     </div>
@@ -669,20 +699,27 @@ export const Feed: React.FC = () => {
                 {/* Existing comments */}
                 {post.comments.map((comment) => (
                   <div key={comment.id} className="flex gap-2 items-start text-xs">
-                    <img
-                      src={comment.avatar}
-                      alt={comment.displayName}
+                    <button
+                      type="button"
                       onClick={() => handleUserClick(comment.userId, comment.displayName, comment.avatar)}
-                      className="w-6 h-6 rounded-full object-cover cursor-pointer hover:opacity-80 transition-opacity"
-                    />
+                      aria-label={comment.displayName}
+                      className="p-0 border-none bg-transparent cursor-pointer rounded-full shrink-0"
+                    >
+                      <img
+                        src={comment.avatar}
+                        alt={comment.displayName}
+                        className="w-6 h-6 rounded-full object-cover hover:opacity-80 transition-opacity"
+                      />
+                    </button>
                     <div className="flex-1">
                       <div>
-                        <strong 
+                        <button
+                          type="button"
                           onClick={() => handleUserClick(comment.userId, comment.displayName, comment.avatar)}
-                          className="font-bold text-text-slate-dark mr-1 cursor-pointer hover:text-brand-orange hover:underline transition-all"
+                          className="bg-transparent border-none p-0 font-bold text-text-slate-dark mr-1 cursor-pointer hover:text-brand-orange hover:underline transition-all"
                         >
                           {comment.displayName}
-                        </strong>{' '}
+                        </button>{' '}
                         <span className="text-text-slate-medium">{comment.content}</span>
                       </div>
                       <div className="text-[10px] text-text-slate-light mt-0.5">
@@ -748,18 +785,27 @@ export const Feed: React.FC = () => {
                 
                 return (
                   <div key={book.id} className="flex gap-3 items-start">
-                    <img
-                      src={book.coverImage}
-                      alt={book.title}
+                    <button
+                      type="button"
                       onClick={() => viewBookDetails(book)}
-                      className="w-11 h-16 object-cover rounded-md border border-border-light-gray cursor-pointer hover:opacity-85 transition-opacity"
-                    />
+                      aria-label={book.title}
+                      className="p-0 border-none bg-transparent cursor-pointer shrink-0 rounded-md"
+                    >
+                      <img
+                        src={book.coverImage}
+                        alt={book.title}
+                        className="w-11 h-16 object-cover rounded-md border border-border-light-gray hover:opacity-85 transition-opacity"
+                      />
+                    </button>
                     <div className="flex-1 min-w-0 flex flex-col gap-1">
-                      <h4 
-                        onClick={() => viewBookDetails(book)}
-                        className="text-xs font-bold text-text-slate-dark truncate cursor-pointer hover:text-brand-orange hover:underline"
-                      >
-                        {book.title}
+                      <h4 className="text-xs font-bold text-text-slate-dark truncate">
+                        <button
+                          type="button"
+                          onClick={() => viewBookDetails(book)}
+                          className="text-left bg-transparent border-none p-0 font-bold text-text-slate-dark truncate w-full cursor-pointer hover:text-brand-orange hover:underline"
+                        >
+                          {book.title}
+                        </button>
                       </h4>
                       <p className="text-[11px] text-text-slate-medium truncate">
                         {language === 'id' ? 'oleh' : 'by'} {book.author}
@@ -843,18 +889,27 @@ export const Feed: React.FC = () => {
               <div className="flex flex-col gap-4">
                 {friendRecommendations.map((item) => (
                   <div key={item.book.id} className="flex gap-3 items-start border-b border-border-light-gray/40 pb-3 last:border-b-0 last:pb-0">
-                    <img
-                      src={item.book.coverImage}
-                      alt={item.book.title}
+                    <button
+                      type="button"
                       onClick={() => viewBookDetails(item.book)}
-                      className="w-11 h-16 object-cover rounded-md border border-border-light-gray cursor-pointer hover:opacity-85 transition-opacity shrink-0 shadow-3xs"
-                    />
+                      aria-label={item.book.title}
+                      className="p-0 border-none bg-transparent cursor-pointer shrink-0 rounded-md"
+                    >
+                      <img
+                        src={item.book.coverImage}
+                        alt={item.book.title}
+                        className="w-11 h-16 object-cover rounded-md border border-border-light-gray hover:opacity-85 transition-opacity shadow-3xs"
+                      />
+                    </button>
                     <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                      <h4 
-                        onClick={() => viewBookDetails(item.book)}
-                        className="text-xs font-bold text-text-slate-dark truncate cursor-pointer hover:text-brand-orange hover:underline"
-                      >
-                        {item.book.title}
+                      <h4 className="text-xs font-bold text-text-slate-dark truncate">
+                        <button
+                          type="button"
+                          onClick={() => viewBookDetails(item.book)}
+                          className="text-left bg-transparent border-none p-0 font-bold text-text-slate-dark truncate w-full cursor-pointer hover:text-brand-orange hover:underline"
+                        >
+                          {item.book.title}
+                        </button>
                       </h4>
                       <p className="text-[10px] text-text-slate-medium truncate mb-0.5">
                         oleh {item.book.author}

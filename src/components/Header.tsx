@@ -148,18 +148,20 @@ export const Header: React.FC = () => {
         {/* Left Section: Logo & Nav Links */}
         <div className="flex items-center gap-7">
           {/* Logo */}
-          <div 
+          <button
+            type="button"
             onClick={() => {
               setCurrentTab('feed');
               setViewedUser(null);
             }}
-            className="flex items-center gap-2 cursor-pointer"
+            aria-label="AKRA Beranda"
+            className="flex items-center gap-2 cursor-pointer bg-transparent border-none p-0"
           >
             <AnimatedBook size="sm" className="transform hover:scale-105 active-pop" />
             <span className="text-xl font-extrabold text-brand-orange tracking-tight select-none">
               akra
             </span>
-          </div>
+          </button>
 
           {/* Navigation Links */}
           <nav className="hidden md:flex gap-4">
@@ -219,21 +221,22 @@ export const Header: React.FC = () => {
                     {language === 'id' ? 'Buku Saya' : 'My Books'} ({matchingMyBooks.length})
                   </div>
                   {matchingMyBooks.map(b => (
-                    <div
+                    <button
+                      type="button"
                       key={b.id}
                       onClick={() => {
                         setCurrentTab('books');
                         setLocalSearch('');
                         setShowSuggestions(false);
                       }}
-                      className="p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
+                      className="w-full text-left bg-transparent border-none p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
                     >
                       <img src={b.coverImage} alt={b.title} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-text-slate-dark truncate">{b.title}</p>
                         <p className="text-[10px] text-text-slate-medium truncate">{language === 'id' ? 'oleh' : 'by'} {b.author}</p>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -245,14 +248,15 @@ export const Header: React.FC = () => {
                     {language === 'id' ? 'Buku Baru (Database)' : 'New Books (Database)'}
                   </div>
                   {matchingDbBooks.map(b => (
-                    <div
+                    <button
+                      type="button"
                       key={b.id}
                       onClick={() => {
                         viewBookDetails(b as any);
                         setLocalSearch('');
                         setShowSuggestions(false);
                       }}
-                      className="p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
+                      className="w-full text-left bg-transparent border-none p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
                     >
                       <img src={b.coverImage} alt={b.title} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
                       <div className="min-w-0 flex-1">
@@ -262,7 +266,7 @@ export const Header: React.FC = () => {
                       <span className="text-[9px] text-brand-orange border border-brand-orange/30 bg-brand-orange-glow px-1.5 py-0.5 rounded-md font-bold shrink-0 transition-all hover:bg-brand-orange hover:text-white">
                         {language === 'id' ? '+ Tambah' : '+ Add'}
                       </span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -274,7 +278,8 @@ export const Header: React.FC = () => {
                     {language === 'id' ? 'Teman & Pengguna' : 'Friends & Users'}
                   </div>
                   {matchingUsers.map(u => (
-                    <div
+                    <button
+                      type="button"
                       key={u.id}
                       onClick={() => {
                         setViewedUser(u);
@@ -282,14 +287,14 @@ export const Header: React.FC = () => {
                         setLocalSearch('');
                         setShowSuggestions(false);
                       }}
-                      className="p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
+                      className="w-full text-left bg-transparent border-none p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
                     >
                       <img src={u.avatar} alt={u.displayName} className="w-6 h-6 rounded-full object-cover border border-border-light-gray shrink-0" />
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-text-slate-dark truncate">{u.displayName}</p>
                         <p className="text-[10px] text-text-slate-light truncate">@{u.username}</p>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -301,18 +306,19 @@ export const Header: React.FC = () => {
                     {language === 'id' ? 'Kutipan & Catatan' : 'Quotes & Thoughts'}
                   </div>
                   {matchingPosts.map(p => (
-                    <div
+                    <button
+                      type="button"
                       key={p.id}
                       onClick={() => {
                         setCurrentTab('feed');
                         setLocalSearch('');
                         setShowSuggestions(false);
                       }}
-                      className="p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex flex-col gap-0.5 transition-colors"
+                      className="w-full text-left bg-transparent border-none p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex flex-col gap-0.5 transition-colors"
                     >
                       <p className="text-text-slate-dark truncate italic font-medium">"{p.content}"</p>
                       {p.bookTitle && <p className="text-[9px] text-text-slate-medium truncate">{language === 'id' ? 'Buku' : 'Book'}: {p.bookTitle}</p>}
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -330,14 +336,15 @@ export const Header: React.FC = () => {
                       {language === 'id' ? 'Buku Baru' : 'New Books'}
                     </div>
                     {onlineSuggestions.map(b => (
-                      <div
+                      <button
+                        type="button"
                         key={b.id}
                         onClick={() => {
                           viewBookDetails(b as any);
                           setLocalSearch('');
                           setShowSuggestions(false);
                         }}
-                        className="p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
+                        className="w-full text-left bg-transparent border-none p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
                       >
                         <img src={b.coverImage} alt={b.title} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
                         <div className="min-w-0 flex-1">
@@ -347,7 +354,7 @@ export const Header: React.FC = () => {
                         <span className="text-[9px] text-brand-orange border border-brand-orange/30 bg-brand-orange-glow px-1.5 py-0.5 rounded-md font-bold shrink-0 transition-all hover:bg-brand-orange hover:text-white">
                           {language === 'id' ? '+ Tambah' : '+ Add'}
                         </span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )
@@ -524,12 +531,19 @@ export const Header: React.FC = () => {
 
               {/* User Profile Avatar with Click Dropdown */}
               <div className="relative" ref={dropdownRef}>
-                <img
-                  src={currentUser.avatar}
-                  alt={currentUser.displayName}
+                <button
+                  type="button"
                   onClick={() => setShowDropdown(!showDropdown)}
-                  className="w-8 h-8 rounded-full object-cover cursor-pointer border border-border-light-gray hover:border-brand-orange transition-all"
-                />
+                  aria-label={language === 'id' ? 'Menu Profil' : 'Profile Menu'}
+                  aria-expanded={showDropdown}
+                  className="rounded-full p-0 border-none bg-transparent cursor-pointer flex items-center justify-center"
+                >
+                  <img
+                    src={currentUser.avatar}
+                    alt={currentUser.displayName}
+                    className="w-8 h-8 rounded-full object-cover border border-border-light-gray hover:border-brand-orange transition-all"
+                  />
+                </button>
 
                 {/* Dropdown Menu */}
                 {showDropdown && (

@@ -467,18 +467,24 @@ export const Profile: React.FC = () => {
                     const progress = userProgress.find((p) => p.bookId === book.id);
                     const percent = computePercent(progress?.currentPage || 0, book.totalPages);
                     return (
-                      <div key={book.id} className="flex flex-col gap-2 min-w-[90px] max-w-[90px] shrink-0 group cursor-pointer"
-                        onClick={() => viewBookDetails(book)}>
-                        <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden border border-border-light-gray shadow-2xs group-hover:shadow-xs transition-all">
-                          <img src={book.coverImage} alt={book.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
-                            <div className="h-full bg-brand-orange" style={{ width: `${percent}%` }} />
+                      <div key={book.id} className="flex flex-col gap-2 min-w-[90px] max-w-[90px] shrink-0 group">
+                        <button
+                          type="button"
+                          onClick={() => viewBookDetails(book)}
+                          aria-label={book.title}
+                          className="text-left bg-transparent border-none p-0 flex flex-col gap-2 w-full cursor-pointer"
+                        >
+                          <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden border border-border-light-gray shadow-2xs group-hover:shadow-xs transition-all">
+                            <img src={book.coverImage} alt={book.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
+                              <div className="h-full bg-brand-orange" style={{ width: `${percent}%` }} />
+                            </div>
                           </div>
-                        </div>
-                        <p className="text-[10px] font-bold text-text-slate-dark truncate group-hover:text-brand-orange transition-colors leading-tight">{book.title}</p>
+                          <p className="text-[10px] font-bold text-text-slate-dark truncate group-hover:text-brand-orange transition-colors leading-tight w-full">{book.title}</p>
+                        </button>
                         <p className="text-[9px] text-text-slate-light -mt-1">{percent}%</p>
                         {isOwnProfile && (
-                          <button onClick={e => { e.stopPropagation(); handleOpenProgressModal(book); }}
+                          <button type="button" onClick={() => handleOpenProgressModal(book)}
                             className="text-[9px] font-bold text-brand-orange border border-brand-orange/30 bg-brand-orange-glow rounded-full px-2 py-0.5 hover:bg-brand-orange hover:text-white transition-all cursor-pointer text-center">
                             + Progres
                           </button>
@@ -504,26 +510,33 @@ export const Profile: React.FC = () => {
                   {wantToReadBooks.slice(0, 6).map((book) => (
                     <div key={book.id} className="flex flex-col group relative">
                       <div className="relative aspect-[2/3] rounded-md overflow-hidden border border-border-light-gray shadow-2xs group-hover:shadow-xs transition-all">
-                        <img src={book.coverImage} alt={book.title} onClick={() => viewBookDetails(book)}
-                          className="w-full h-full object-cover cursor-pointer group-hover:scale-102 transition-transform duration-200" />
+                        <button
+                          type="button"
+                          onClick={() => viewBookDetails(book)}
+                          aria-label={book.title}
+                          className="w-full h-full p-0 border-none bg-transparent cursor-pointer block"
+                        >
+                          <img src={book.coverImage} alt={book.title}
+                            className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-200" />
+                        </button>
                         {isOwnProfile && (
                           <div className="absolute top-1 right-1">
-                            <button onClick={() => setActionMenuBookId(actionMenuBookId === book.id ? null : book.id)}
+                            <button type="button" onClick={() => setActionMenuBookId(actionMenuBookId === book.id ? null : book.id)}
                               className="w-5 h-5 rounded-full bg-white/90 flex items-center justify-center text-text-slate-medium shadow-xs cursor-pointer">
                               <MoreVertical size={10} />
                             </button>
                             {actionMenuBookId === book.id && (
                               <div className="absolute right-0 mt-0.5 w-32 bg-white border border-border-light-gray rounded-lg shadow-md p-1 z-30 animate-fade-in">
-                                <button onClick={() => handleMoveBookStatus(book.id, 'READING')}
+                                <button type="button" onClick={() => handleMoveBookStatus(book.id, 'READING')}
                                   className="text-left w-full bg-transparent border-none text-[10px] font-semibold text-text-slate-medium rounded-md py-1.5 px-2 hover:bg-gray-100 cursor-pointer">📖 Mulai Baca</button>
-                                <button onClick={() => handleMoveBookStatus(book.id, 'COMPLETED')}
+                                <button type="button" onClick={() => handleMoveBookStatus(book.id, 'COMPLETED')}
                                   className="text-left w-full bg-transparent border-none text-[10px] font-semibold text-text-slate-medium rounded-md py-1.5 px-2 hover:bg-gray-100 cursor-pointer">✓ Selesai</button>
                               </div>
                             )}
                           </div>
                         )}
                       </div>
-                      <p className="text-[10px] font-bold text-text-slate-dark mt-1 truncate cursor-pointer hover:text-brand-orange" onClick={() => viewBookDetails(book)}>{book.title}</p>
+                      <button type="button" onClick={() => viewBookDetails(book)} className="text-left bg-transparent border-none p-0 text-[10px] font-bold text-text-slate-dark mt-1 truncate cursor-pointer hover:text-brand-orange">{book.title}</button>
                     </div>
                   ))}
                 </div>
@@ -544,27 +557,34 @@ export const Profile: React.FC = () => {
                   {completedBooks.slice(0, 6).map((book) => (
                     <div key={book.id} className="flex flex-col group relative">
                       <div className="relative aspect-[2/3] rounded-md overflow-hidden border border-border-light-gray shadow-2xs group-hover:shadow-xs transition-all">
-                        <img src={book.coverImage} alt={book.title} onClick={() => viewBookDetails(book)}
-                          className="w-full h-full object-cover cursor-pointer group-hover:scale-102 transition-transform duration-200" />
+                        <button
+                          type="button"
+                          onClick={() => viewBookDetails(book)}
+                          aria-label={book.title}
+                          className="w-full h-full p-0 border-none bg-transparent cursor-pointer block"
+                        >
+                          <img src={book.coverImage} alt={book.title}
+                            className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-200" />
+                        </button>
                         <div className="absolute bottom-0 left-0 right-0 h-1 bg-brand-orange" />
                         {isOwnProfile && (
                           <div className="absolute top-1 right-1">
-                            <button onClick={() => setActionMenuBookId(actionMenuBookId === book.id ? null : book.id)}
+                            <button type="button" onClick={() => setActionMenuBookId(actionMenuBookId === book.id ? null : book.id)}
                               className="w-5 h-5 rounded-full bg-white/90 flex items-center justify-center text-text-slate-medium shadow-xs cursor-pointer">
                               <MoreVertical size={10} />
                             </button>
                             {actionMenuBookId === book.id && (
                               <div className="absolute right-0 mt-0.5 w-32 bg-white border border-border-light-gray rounded-lg shadow-md p-1 z-30 animate-fade-in">
-                                <button onClick={() => handleMoveBookStatus(book.id, 'READING')}
+                                <button type="button" onClick={() => handleMoveBookStatus(book.id, 'READING')}
                                   className="text-left w-full bg-transparent border-none text-[10px] font-semibold text-text-slate-medium rounded-md py-1.5 px-2 hover:bg-gray-100 cursor-pointer">📖 Baca Ulang</button>
-                                <button onClick={() => handleMoveBookStatus(book.id, 'WANT_TO_READ')}
+                                <button type="button" onClick={() => handleMoveBookStatus(book.id, 'WANT_TO_READ')}
                                   className="text-left w-full bg-transparent border-none text-[10px] font-semibold text-text-slate-medium rounded-md py-1.5 px-2 hover:bg-gray-100 cursor-pointer">⏳ Ingin Baca</button>
                               </div>
                             )}
                           </div>
                         )}
                       </div>
-                      <p className="text-[10px] font-bold text-text-slate-dark mt-1 truncate cursor-pointer hover:text-brand-orange" onClick={() => viewBookDetails(book)}>{book.title}</p>
+                      <button type="button" onClick={() => viewBookDetails(book)} className="text-left bg-transparent border-none p-0 text-[10px] font-bold text-text-slate-dark mt-1 truncate cursor-pointer hover:text-brand-orange">{book.title}</button>
                       <span className="text-[9px] text-brand-orange font-bold">✓ Selesai</span>
                     </div>
                   ))}
@@ -587,8 +607,12 @@ export const Profile: React.FC = () => {
                       const isExpanded = expandedShelfId === shelf.id;
                       return (
                         <div key={shelf.id} className="border border-border-light-gray rounded-xl overflow-hidden">
-                          <div onClick={() => setExpandedShelfId(isExpanded ? null : shelf.id)}
-                            className="flex justify-between items-center p-3 cursor-pointer hover:bg-gray-50 transition-colors">
+                          <button
+                            type="button"
+                            aria-expanded={isExpanded}
+                            onClick={() => setExpandedShelfId(isExpanded ? null : shelf.id)}
+                            className="w-full bg-transparent border-none flex justify-between items-center p-3 cursor-pointer hover:bg-gray-50 transition-colors text-left"
+                          >
                             <div className="flex items-center gap-2">
                               {isExpanded ? <ChevronDown size={14} className="text-brand-orange" /> : <ChevronRight size={14} className="text-brand-orange" />}
                               <span className="text-xs font-bold text-text-slate-dark">{shelf.name}</span>
@@ -599,12 +623,20 @@ export const Profile: React.FC = () => {
                                 <img key={b.id} src={b.coverImage} alt="" className="w-5 h-7 object-cover rounded-xs border border-white shadow-xs" />
                               ))}
                             </div>
-                          </div>
+                          </button>
                           {isExpanded && shelfBooks.length > 0 && (
                             <div className="p-3 pt-0 border-t border-border-light-gray/60 grid grid-cols-5 sm:grid-cols-6 gap-2 animate-slide-in">
                               {shelfBooks.map(book => (
-                                <img key={book.id} src={book.coverImage} alt={book.title} onClick={() => viewBookDetails(book)}
-                                  className="w-full aspect-[2/3] object-cover rounded-md border border-border-light-gray cursor-pointer hover:scale-102 transition-transform" />
+                                <button
+                                  key={book.id}
+                                  type="button"
+                                  onClick={() => viewBookDetails(book)}
+                                  aria-label={book.title}
+                                  className="p-0 border-none bg-transparent cursor-pointer rounded-md overflow-hidden"
+                                >
+                                  <img src={book.coverImage} alt={book.title}
+                                    className="w-full aspect-[2/3] object-cover rounded-md border border-border-light-gray hover:scale-102 transition-transform" />
+                                </button>
                               ))}
                             </div>
                           )}
@@ -934,12 +966,17 @@ export const Profile: React.FC = () => {
             <form onSubmit={handleSave} className="p-6 flex flex-col gap-4 overflow-y-auto max-h-[85vh]">
               {/* Avatar */}
               <div className="flex flex-col items-center gap-2 pb-4 border-b border-border-light-gray">
-                <div className="relative group cursor-pointer w-16 h-16" onClick={() => fileInputRef.current?.click()}>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  aria-label="Ubah foto profil"
+                  className="relative group cursor-pointer w-16 h-16 p-0 border-none bg-transparent rounded-full"
+                >
                   <img src={editAvatar} alt="Preview" className="w-16 h-16 rounded-full object-cover border-2 border-brand-orange shadow-md group-hover:opacity-85 transition-opacity" />
                   <div className="absolute inset-0 bg-black/45 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <span className="text-white text-[9px] font-bold">Ubah</span>
                   </div>
-                </div>
+                </button>
                 <input type="file" ref={fileInputRef} onChange={handleFileChange} accept={RASTER_IMAGE_ACCEPT} className="hidden" />
                 <button type="button" onClick={() => fileInputRef.current?.click()}
                   className="bg-transparent border-none text-xs font-bold text-brand-orange cursor-pointer hover:text-brand-orange-hover">
@@ -949,8 +986,15 @@ export const Profile: React.FC = () => {
                   <span className="text-[10px] text-text-slate-medium font-semibold">Preset:</span>
                   <div className="flex gap-1.5">
                     {PRESET_AVATARS.map((av, idx) => (
-                      <img key={idx} src={av} alt="" onClick={() => setEditAvatar(av)}
-                        className={`w-6 h-6 rounded-full object-cover cursor-pointer border transition-all ${editAvatar === av ? 'border-brand-orange ring-2 ring-brand-orange/20 scale-105' : 'border-border-light-gray'}`} />
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setEditAvatar(av)}
+                        aria-label={`Pilih avatar preset ${idx + 1}`}
+                        className="p-0 border-none bg-transparent rounded-full cursor-pointer"
+                      >
+                        <img src={av} alt="" className={`w-6 h-6 rounded-full object-cover border transition-all ${editAvatar === av ? 'border-brand-orange ring-2 ring-brand-orange/20 scale-105' : 'border-border-light-gray'}`} />
+                      </button>
                     ))}
                   </div>
                 </div>
