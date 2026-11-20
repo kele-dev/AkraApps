@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { User, Book, ReadingProgress, Post, ReadingGoal, Comment, Story, Shelf, BuddyRead, BuddyMessage, Notification } from '../types';
 import { auth, db, isDemoMode, firebaseConfigError, simulateGoogleSignIn, signInWithGoogleReal } from '../lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, doc, setDoc, getDoc, getDocs, query, where, limit, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, query, where, limit, deleteDoc, writeBatch } from 'firebase/firestore';
 import { canDeletePost, filterOwnedRecordsForSync, FIRESTORE_QUERY_LIMITS } from '../lib/firestoreSync';
 import { computeProgressTransition } from '../lib/progressUtils';
 import { safeStorageGet, safeStorageRemove, safeStorageSet } from '../lib/storage';
@@ -311,26 +311,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser, isLoaded]);
 
-  // 3. Save User Specific Data when state changes (Always mirror to LocalStorage, sync to Firestore if real)
+  // 3. Per-slice LocalStorage persistence (avoids re-serializing all 10 keys on unrelated updates)
   useEffect(() => {
     if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_books`, books);
+  }, [books, currentUser.id, isLoaded]);
 
-    const prefix = `akra_${currentUser.id}_`;
-    safeStorageSet(`${prefix}books`, books);
-    safeStorageSet(`${prefix}progress`, readingProgress);
-    safeStorageSet(`${prefix}posts`, posts);
-    safeStorageSet(`${prefix}goals`, goals);
-    safeStorageSet(`${prefix}stories`, stories);
-    safeStorageSet(`${prefix}saved_bookmarks`, savedPostIds);
-    safeStorageSet(`${prefix}shelves`, shelves);
-    safeStorageSet(`${prefix}buddy_reads`, buddyReads);
-    safeStorageSet(`${prefix}buddy_messages`, buddyMessages);
-    safeStorageSet(`${prefix}notifications`, notifications);
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_progress`, readingProgress);
+  }, [readingProgress, currentUser.id, isLoaded]);
 
-    if (!isDemoMode) {
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_posts`, posts);
+  }, [posts, currentUser.id, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_goals`, goals);
+  }, [goals, currentUser.id, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_stories`, stories);
+  }, [stories, currentUser.id, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_saved_bookmarks`, savedPostIds);
+  }, [savedPostIds, currentUser.id, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_shelves`, shelves);
+  }, [shelves, currentUser.id, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_buddy_reads`, buddyReads);
+  }, [buddyReads, currentUser.id, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_buddy_messages`, buddyMessages);
+  }, [buddyMessages, currentUser.id, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_notifications`, notifications);
+  }, [notifications, currentUser.id, isLoaded]);
+
+  // Debounced Firestore batch sync for synced collections
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest' || isDemoMode || !db) return;
+    const timer = setTimeout(() => {
       syncDataToFirestore();
-    }
-  }, [books, readingProgress, posts, goals, stories, savedPostIds, shelves, buddyReads, buddyMessages, notifications, currentUser, isLoaded]);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [books, readingProgress, posts, goals, currentUser.id, isLoaded]);
 
   // Sync from Firestore
   const syncDataFromFirestore = async (userId: string, userObj: User) => {
@@ -349,24 +388,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       setIsLoggedIn(true);
 
-      // Query Books (bounded)
       const booksQuery = query(collection(db, 'books'), limit(FIRESTORE_QUERY_LIMITS.books));
-      const booksSnap = await getDocs(booksQuery);
+      const usersQuery = query(collection(db, 'users'), limit(FIRESTORE_QUERY_LIMITS.users));
+      const progressQuery = query(collection(db, 'progress'), limit(FIRESTORE_QUERY_LIMITS.progress));
+      const goalsQuery = query(
+        collection(db, 'goals'),
+        where('userId', '==', userId),
+        limit(FIRESTORE_QUERY_LIMITS.goals)
+      );
+      const postsQuery = query(collection(db, 'posts'), limit(FIRESTORE_QUERY_LIMITS.posts));
+
+      const [booksSnap, usersSnap, progressSnap, goalsSnap, postsSnap] = await Promise.all([
+        getDocs(booksQuery),
+        getDocs(usersQuery),
+        getDocs(progressQuery),
+        getDocs(goalsQuery),
+        getDocs(postsQuery),
+      ]);
+
       const booksList: Book[] = [];
       booksSnap.forEach((docSnap) => {
         booksList.push(docSnap.data() as Book);
       });
       setBooks(booksList.length > 0 ? booksList : INITIAL_BOOKS);
 
-      // 2. Query Users (bounded public directory for social feed)
-      const usersQuery = query(collection(db, 'users'), limit(FIRESTORE_QUERY_LIMITS.users));
-      const usersSnap = await getDocs(usersQuery);
       const usersList: User[] = [];
       usersSnap.forEach((docSnap) => {
         usersList.push(docSnap.data() as User);
       });
-      
-      // Merge with initial users to ensure default demo accounts exist if not in Firestore
       const existingUserIds = new Set(usersList.map(u => u.id));
       const mergedUsers = [...usersList];
       for (const u of INITIAL_USERS) {
@@ -376,31 +425,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       setUsers(mergedUsers);
 
-      // Query Progress (bounded)
-      const progressQuery = query(collection(db, 'progress'), limit(FIRESTORE_QUERY_LIMITS.progress));
-      const progressSnap = await getDocs(progressQuery);
       const progressList: ReadingProgress[] = [];
       progressSnap.forEach((docSnap) => {
         progressList.push(docSnap.data() as ReadingProgress);
       });
       setReadingProgress(progressList.length > 0 ? progressList : INITIAL_PROGRESS(userId));
 
-      // Query Goals (scoped strictly to current user)
-      const goalsQuery = query(
-        collection(db, 'goals'),
-        where('userId', '==', userId),
-        limit(FIRESTORE_QUERY_LIMITS.goals)
-      );
-      const goalsSnap = await getDocs(goalsQuery);
       const goalsList: ReadingGoal[] = [];
       goalsSnap.forEach((docSnap) => {
         goalsList.push(docSnap.data() as ReadingGoal);
       });
       setGoals(goalsList.length > 0 ? goalsList : INITIAL_GOALS(userId));
 
-      // Query Posts (bounded)
-      const postsQuery = query(collection(db, 'posts'), limit(FIRESTORE_QUERY_LIMITS.posts));
-      const postsSnap = await getDocs(postsQuery);
       const postsList: Post[] = [];
       postsSnap.forEach((docSnap) => {
         postsList.push(docSnap.data() as Post);
@@ -422,7 +458,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Sync to Firestore (only current user's owned documents)
+  // Sync to Firestore via chunked writeBatch (only current user's owned documents)
   const syncDataToFirestore = async () => {
     if (isDemoMode || !db || currentUser.id === 'guest') return;
     try {
@@ -431,17 +467,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         goals,
         posts,
       });
-      for (const book of books) {
-        await setDoc(doc(db, 'books', book.id), cleanUndefined(book));
-      }
-      for (const p of owned.readingProgress) {
-        await setDoc(doc(db, 'progress', p.id), cleanUndefined(p));
-      }
-      for (const g of owned.goals) {
-        await setDoc(doc(db, 'goals', `${g.userId}_${g.year}`), cleanUndefined(g));
-      }
-      for (const post of owned.posts) {
-        await setDoc(doc(db, 'posts', post.id), cleanUndefined(post));
+
+      const ops: Array<{ ref: ReturnType<typeof doc>; data: Record<string, unknown> }> = [
+        ...books.map((book) => ({ ref: doc(db, 'books', book.id), data: cleanUndefined(book) })),
+        ...owned.readingProgress.map((p) => ({ ref: doc(db, 'progress', p.id), data: cleanUndefined(p) })),
+        ...owned.goals.map((g) => ({ ref: doc(db, 'goals', `${g.userId}_${g.year}`), data: cleanUndefined(g) })),
+        ...owned.posts.map((post) => ({ ref: doc(db, 'posts', post.id), data: cleanUndefined(post) })),
+      ];
+
+      const CHUNK_SIZE = 450;
+      for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
+        const batch = writeBatch(db);
+        for (const op of ops.slice(i, i + CHUNK_SIZE)) {
+          batch.set(op.ref, op.data);
+        }
+        await batch.commit();
       }
     } catch (e) {
       console.error("Gagal sinkronisasi data keluar ke Firestore:", e);
