@@ -272,7 +272,9 @@ export const Profile: React.FC = () => {
               />
               {isOwnProfile && (
                 <button
+                  type="button"
                   onClick={openEditModal}
+                  aria-label="Edit avatar profil"
                   className="absolute bottom-0 right-0 w-7 h-7 bg-brand-orange rounded-full flex items-center justify-center border-2 border-white shadow-sm cursor-pointer hover:bg-brand-orange-hover transition-colors"
                 >
                   <Edit2 size={12} className="text-white" />
@@ -397,11 +399,12 @@ export const Profile: React.FC = () => {
             {isOwnProfile && (
               isEditingGoal ? (
                 <div className="flex items-center gap-2">
-                  <input type="range" min="1" max="100" value={newGoalTarget} 
+                  <input type="range" min="1" max="100" value={newGoalTarget}
+                    aria-label="Target buku tahunan"
                     onChange={e => setNewGoalTarget(parseInt(e.target.value) || 12)}
                     className="w-20 accent-brand-orange h-1" />
                   <span className="text-[10px] font-bold text-brand-orange">{newGoalTarget}</span>
-                  <button onClick={handleSaveGoal} className="text-[10px] font-bold text-brand-orange bg-transparent border-none cursor-pointer">✓</button>
+                  <button type="button" onClick={handleSaveGoal} aria-label="Simpan target membaca" className="text-[10px] font-bold text-brand-orange bg-transparent border-none cursor-pointer">✓</button>
                 </div>
               ) : (
                 <button onClick={() => { setNewGoalTarget(userGoal.targetBooks); setIsEditingGoal(true); }}
@@ -647,9 +650,10 @@ export const Profile: React.FC = () => {
                   {isOwnProfile && (
                     <form onSubmit={handleCreateShelf} className="flex gap-2 mt-3">
                       <input type="text" value={newShelfName} onChange={e => setNewShelfName(e.target.value)}
+                        aria-label="Nama rak baru"
                         className="input-field flex-1 py-1.5 px-3 text-xs rounded-lg h-8"
                         placeholder="Buat rak baru..." />
-                      <button type="submit" className="btn-primary py-1.5 px-3 text-xs rounded-lg h-8 shrink-0">
+                      <button type="submit" aria-label="Tambah rak baru" className="btn-primary py-1.5 px-3 text-xs rounded-lg h-8 shrink-0">
                         <Plus size={12} />
                       </button>
                     </form>
@@ -662,9 +666,10 @@ export const Profile: React.FC = () => {
                   </h3>
                   <form onSubmit={handleCreateShelf} className="flex gap-2">
                     <input type="text" value={newShelfName} onChange={e => setNewShelfName(e.target.value)}
+                      aria-label="Nama rak kustom pertama"
                       className="input-field flex-1 py-1.5 px-3 text-xs rounded-lg h-8"
                       placeholder="Buat rak kustom pertama Anda..." />
-                    <button type="submit" className="btn-primary py-1.5 px-3 text-xs rounded-lg h-8 shrink-0">
+                    <button type="submit" aria-label="Tambah rak kustom" className="btn-primary py-1.5 px-3 text-xs rounded-lg h-8 shrink-0">
                       <Plus size={12} />
                     </button>
                   </form>
@@ -960,6 +965,7 @@ export const Profile: React.FC = () => {
             <div className="flex justify-between items-center px-6 py-4 border-b border-border-light-gray bg-bg-light-gray">
               <h3 className="text-sm font-bold text-text-slate-dark">Edit Profil</h3>
               <button type="button" onClick={() => setIsEditing(false)}
+                aria-label="Tutup modal edit profil"
                 className="text-text-slate-medium hover:text-text-slate-dark bg-transparent border-none text-xl cursor-pointer">&times;</button>
             </div>
 
@@ -977,7 +983,7 @@ export const Profile: React.FC = () => {
                     <span className="text-white text-[9px] font-bold">Ubah</span>
                   </div>
                 </button>
-                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept={RASTER_IMAGE_ACCEPT} className="hidden" />
+                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept={RASTER_IMAGE_ACCEPT} aria-label="Unggah foto profil" className="hidden" />
                 <button type="button" onClick={() => fileInputRef.current?.click()}
                   className="bg-transparent border-none text-xs font-bold text-brand-orange cursor-pointer hover:text-brand-orange-hover">
                   Unggah Gambar Baru
@@ -1003,14 +1009,14 @@ export const Profile: React.FC = () => {
               {/* Fields */}
               <div className="flex flex-col gap-4">
                 {[
-                  { label: 'Nama', value: editName, setter: setEditName, required: true },
-                  { label: 'Username', value: editUsername, setter: setEditUsername, required: true },
-                  { label: 'Lokasi', value: editLocation, setter: setEditLocation },
-                  { label: 'Website', value: editWebsite, setter: setEditWebsite, placeholder: 'https://situs-web.com' },
+                  { id: 'name', label: 'Nama', value: editName, setter: setEditName, required: true },
+                  { id: 'username', label: 'Username', value: editUsername, setter: setEditUsername, required: true },
+                  { id: 'location', label: 'Lokasi', value: editLocation, setter: setEditLocation },
+                  { id: 'website', label: 'Website', value: editWebsite, setter: setEditWebsite, placeholder: 'https://situs-web.com' },
                 ].map(field => (
-                  <div key={field.label} className="grid grid-cols-1 sm:grid-cols-[90px_1fr] items-center gap-2">
-                    <label className="text-xs font-semibold text-text-slate-medium sm:text-right sm:pr-3">{field.label}</label>
-                    <input type="text" value={field.value} required={field.required}
+                  <div key={field.id} className="grid grid-cols-1 sm:grid-cols-[90px_1fr] items-center gap-2">
+                    <label htmlFor={`edit-field-${field.id}`} className="text-xs font-semibold text-text-slate-medium sm:text-right sm:pr-3">{field.label}</label>
+                    <input id={`edit-field-${field.id}`} type="text" value={field.value} required={field.required}
                       onChange={e => field.setter(e.target.value)}
                       placeholder={field.placeholder}
                       className="input-field w-full px-3 py-2 rounded-md text-xs focus-visible:ring-2 focus-visible:ring-brand-orange/40" />
@@ -1018,14 +1024,14 @@ export const Profile: React.FC = () => {
                 ))}
 
                 <div className="grid grid-cols-1 sm:grid-cols-[90px_1fr] items-start gap-2">
-                  <label className="text-xs font-semibold text-text-slate-medium sm:text-right sm:pr-3 pt-2">Bio</label>
-                  <textarea value={editBio} onChange={e => setEditBio(e.target.value)} rows={3}
+                  <label htmlFor="edit-profile-bio" className="text-xs font-semibold text-text-slate-medium sm:text-right sm:pr-3 pt-2">Bio</label>
+                  <textarea id="edit-profile-bio" value={editBio} onChange={e => setEditBio(e.target.value)} rows={3}
                     className="input-field w-full px-3 py-2 rounded-md text-xs resize-none focus-visible:ring-2 focus-visible:ring-brand-orange/40" />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-[90px_1fr] items-center gap-2">
-                  <label className="text-xs font-semibold text-text-slate-medium sm:text-right sm:pr-3">Gender</label>
-                  <select value={editGender} onChange={e => setEditGender(e.target.value)}
+                  <label htmlFor="edit-profile-gender" className="text-xs font-semibold text-text-slate-medium sm:text-right sm:pr-3">Gender</label>
+                  <select id="edit-profile-gender" value={editGender} onChange={e => setEditGender(e.target.value)}
                     className="input-field w-full px-3 py-2 rounded-md text-xs focus-visible:ring-2 focus-visible:ring-brand-orange/40">
                     <option value="Laki-laki">Laki-laki</option>
                     <option value="Perempuan">Perempuan</option>
@@ -1054,7 +1060,8 @@ export const Profile: React.FC = () => {
                 <h3 className="text-xs font-extrabold text-text-slate-dark truncate max-w-[250px]">
                   Perbarui Progres: {activeProgressBook.title}
                 </h3>
-                <button onClick={() => setActiveProgressBook(null)}
+                <button type="button" onClick={() => setActiveProgressBook(null)}
+                  aria-label="Tutup modal perbarui progres"
                   className="text-text-slate-medium hover:text-text-slate-dark bg-transparent border-none text-lg cursor-pointer">&times;</button>
               </div>
 
@@ -1069,13 +1076,13 @@ export const Profile: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col gap-2 bg-gray-50/50 border border-border-light-gray/40 rounded-xl p-3">
-                  <label className="text-[10px] font-extrabold text-text-slate-medium uppercase tracking-wider">Halaman Terbaca:</label>
+                  <label htmlFor="quick-progress-range" className="text-[10px] font-extrabold text-text-slate-medium uppercase tracking-wider">Halaman Terbaca:</label>
                   <div className="flex gap-3 items-center">
-                    <input type="range" min="0" max={activeProgressBook.totalPages} value={quickProgressPage}
+                    <input id="quick-progress-range" type="range" min="0" max={activeProgressBook.totalPages} value={quickProgressPage}
                       onChange={e => setQuickProgressPage(Math.max(0, Math.min(parseInt(e.target.value) || 0, activeProgressBook.totalPages)))}
                       className="flex-1 accent-brand-orange h-1" />
                     <div className="flex items-center gap-1 shrink-0">
-                      <input type="number" min="0" max={activeProgressBook.totalPages} value={quickProgressPage}
+                      <input type="number" aria-label="Angka halaman terbaca" min="0" max={activeProgressBook.totalPages} value={quickProgressPage}
                         onChange={e => setQuickProgressPage(Math.max(0, Math.min(parseInt(e.target.value) || 0, activeProgressBook.totalPages)))}
                         className="w-12 text-center text-xs font-bold border border-border-light-gray rounded-md p-1 focus-visible:ring-2 focus-visible:ring-brand-orange/40 focus:border-brand-orange bg-white" />
                       <span className="text-[10px] text-text-slate-light font-bold">/ {activeProgressBook.totalPages}</span>
@@ -1084,10 +1091,10 @@ export const Profile: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-extrabold text-text-slate-medium uppercase tracking-wider">Rating (1-5 Bintang):</label>
-                  <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-extrabold text-text-slate-medium uppercase tracking-wider">Rating (1-5 Bintang):</span>
+                  <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Rating buku">
                     {[1,2,3,4,5].map(star => (
-                      <button key={star} type="button" onClick={() => setQuickProgressRating(star)}
+                      <button key={star} type="button" aria-label={`${star} bintang`} onClick={() => setQuickProgressRating(star)}
                         className="bg-transparent border-none p-0 cursor-pointer text-xl hover:scale-110 transition-transform">
                         <span className="font-sans text-brand-orange">{star <= quickProgressRating ? '★' : '☆'}</span>
                       </button>
@@ -1100,8 +1107,8 @@ export const Profile: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-extrabold text-text-slate-medium uppercase tracking-wider">Catatan / Kutipan (Opsional):</label>
-                  <textarea rows={2} value={quickProgressNote} onChange={e => setQuickProgressNote(e.target.value)}
+                  <label htmlFor="quick-progress-note" className="text-[10px] font-extrabold text-text-slate-medium uppercase tracking-wider">Catatan / Kutipan (Opsional):</label>
+                  <textarea id="quick-progress-note" rows={2} value={quickProgressNote} onChange={e => setQuickProgressNote(e.target.value)}
                     placeholder="Tulis pemikiran atau kutipan favorit..."
                     className="input-field w-full px-3 py-2 rounded-lg text-xs resize-none bg-gray-50 focus-visible:ring-2 focus-visible:ring-brand-orange/40" />
                 </div>

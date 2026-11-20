@@ -298,6 +298,7 @@ export const Feed: React.FC = () => {
                     <img src={photoPreview} alt="Preview" className="w-full max-h-72 object-cover" />
                     <button
                       type="button"
+                      aria-label={language === 'id' ? 'Hapus pratinjau foto' : 'Remove photo preview'}
                       onClick={() => setPhotoPreview(null)}
                       className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 flex items-center justify-center text-white cursor-pointer border-none hover:bg-black/80 transition-colors"
                     >
@@ -335,10 +336,12 @@ export const Feed: React.FC = () => {
                   ref={photoInputRef}
                   type="file"
                   accept={RASTER_IMAGE_ACCEPT}
+                  aria-label={language === 'id' ? 'Unggah foto postingan' : 'Upload post photo'}
                   className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoChange(f); e.target.value = ''; }}
                 />
                 <textarea
+                  aria-label={language === 'id' ? 'Keterangan foto' : 'Photo caption'}
                   className="w-full bg-white text-text-slate-dark text-sm p-1 resize-none min-h-[50px] focus-visible:ring-2 focus-visible:ring-brand-orange/40 rounded"
                   rows={2}
                   placeholder={language === 'id' ? 'Tambah keterangan foto... (opsional)' : 'Add photo caption... (optional)'}
@@ -348,6 +351,7 @@ export const Feed: React.FC = () => {
               </div>
             ) : (
               <textarea
+                aria-label={postType === 'QUOTE' ? (language === 'id' ? 'Tulis kutipan' : 'Write quote') : (language === 'id' ? 'Tulis ulasan' : 'Write review')}
                 className="w-full bg-white text-text-slate-dark text-sm p-1 resize-vertical min-h-[60px] focus-visible:ring-2 focus-visible:ring-brand-orange/40 rounded"
                 rows={2}
                 placeholder={
@@ -365,6 +369,7 @@ export const Feed: React.FC = () => {
               <div className="flex items-center gap-1.5 flex-1 min-w-[180px]">
                 <Bookmark size={16} className="text-text-slate-light" />
                 <select
+                  aria-label={language === 'id' ? 'Hubungkan dengan Buku' : 'Connect with Book'}
                   className="w-full bg-bg-light-gray text-text-slate-dark text-xs p-1.5 rounded-md border border-transparent focus-visible:ring-2 focus-visible:ring-brand-orange/40"
                   value={selectedBookId}
                   onChange={(e) => setSelectedBookId(e.target.value)}
@@ -740,6 +745,7 @@ export const Feed: React.FC = () => {
                     <input
                       ref={(el) => { commentInputRefs.current[post.id] = el; }}
                       type="text"
+                      aria-label={translations[language].writeCommentPlaceholder}
                       className="input-field w-full pr-9 text-xs bg-white border border-border-light-gray rounded-md h-8 focus-visible:ring-2 focus-visible:ring-brand-orange/40 focus:border-brand-orange transition-all"
                       placeholder="Tulis komentar..."
                       value={commentInputs[post.id] || ''}
@@ -749,6 +755,8 @@ export const Feed: React.FC = () => {
                       }}
                     />
                     <button
+                      type="button"
+                      aria-label={language === 'id' ? 'Kirim komentar' : 'Send comment'}
                       onClick={() => handleCommentSubmit(post.id)}
                       className="absolute right-2 top-1/2 -translate-y-1/2 bg-transparent border-none text-brand-orange cursor-pointer flex items-center"
                     >
@@ -815,12 +823,15 @@ export const Feed: React.FC = () => {
                         <div className="flex gap-1.5 items-center mt-1">
                           <input
                             type="number"
+                            aria-label={language === 'id' ? `Halaman saat ini untuk ${book.title}` : `Current page for ${book.title}`}
                             value={logPage}
                             onChange={(e) => setLogPage(parseInt(e.target.value) || 0)}
                             className="w-11 text-xs p-1 border border-border-light-gray rounded-md bg-white text-center focus-visible:ring-2 focus-visible:ring-brand-orange/40"
                           />
                           <span className="text-[10px] text-text-slate-light">/ {book.totalPages}</span>
                           <button 
+                            type="button"
+                            aria-label={language === 'id' ? 'Simpan progres' : 'Save progress'}
                             onClick={() => handleQuickLogProgress(book.id)} 
                             className="bg-brand-orange text-white border-none rounded-md p-1 cursor-pointer flex items-center"
                           >
@@ -1022,6 +1033,8 @@ export const Feed: React.FC = () => {
                   </div>
                 </div>
                 <button
+                  type="button"
+                  aria-label={language === 'id' ? 'Tutup cerita' : 'Close story'}
                   onClick={() => {
                     setActiveStoryUserId(null);
                     setActiveStoryIndex(0);
@@ -1091,6 +1104,7 @@ export const Feed: React.FC = () => {
               <h3 className="text-sm font-bold text-text-slate-dark">{language === 'id' ? 'Bagikan Cerita Anda' : 'Share Your Story'}</h3>
               <button 
                 type="button"
+                aria-label={language === 'id' ? 'Tutup modal cerita' : 'Close story modal'}
                 onClick={() => {
                   setShowCreateStory(false);
                   setStoryContent('');
@@ -1115,8 +1129,9 @@ export const Feed: React.FC = () => {
               className="p-6 flex flex-col gap-4"
             >
               <div>
-                <label className="block text-xs font-semibold text-text-slate-medium mb-1.5">{language === 'id' ? 'Apa yang ingin Anda bagikan?' : 'What do you want to share?'}</label>
+                <label htmlFor="story-content-input" className="block text-xs font-semibold text-text-slate-medium mb-1.5">{language === 'id' ? 'Apa yang ingin Anda bagikan?' : 'What do you want to share?'}</label>
                 <textarea
+                  id="story-content-input"
                   className="input-field w-full px-3 py-2 text-xs resize-none focus-visible:ring-2 focus-visible:ring-brand-orange/40"
                   rows={4}
                   maxLength={120}
@@ -1131,8 +1146,9 @@ export const Feed: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-text-slate-medium mb-1.5">{language === 'id' ? 'Hubungkan ke Buku (Opsional)' : 'Connect to Book (Optional)'}</label>
+                <label htmlFor="story-book-select" className="block text-xs font-semibold text-text-slate-medium mb-1.5">{language === 'id' ? 'Hubungkan ke Buku (Opsional)' : 'Connect to Book (Optional)'}</label>
                 <select
+                  id="story-book-select"
                   className="input-field w-full px-3 py-2 text-xs focus-visible:ring-2 focus-visible:ring-brand-orange/40"
                   value={storyBookTitle}
                   onChange={(e) => setStoryBookTitle(e.target.value)}

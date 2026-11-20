@@ -198,6 +198,7 @@ export const SearchPage: React.FC = () => {
         >
           <input
             type="text"
+            aria-label={language === 'id' ? 'Cari berdasarkan judul, penulis, atau kata kunci' : 'Search by title, author, or keyword'}
             className="input-field flex-1 px-3 py-2 rounded border border-[#d6d0c0] bg-white text-sm text-text-slate-dark focus:border-brand-orange focus-visible:ring-2 focus-visible:ring-brand-orange/40"
             placeholder="Cari berdasarkan judul, penulis, atau kata kunci..."
             value={searchQuery}
@@ -393,6 +394,7 @@ export const SearchPage: React.FC = () => {
                                 </button>
                                 <button
                                   type="button"
+                                  aria-label={language === 'id' ? `Pilih rak untuk ${book.title}` : `Select shelf for ${book.title}`}
                                   onClick={() => setActiveDropdownId(activeDropdownId === book.id ? null : book.id)}
                                   className="px-1.5 bg-[#409d69] hover:bg-[#348055] text-white border-l border-white/20 rounded-r cursor-pointer transition-colors flex items-center justify-center"
                                 >

@@ -429,6 +429,7 @@ export const Books: React.FC = () => {
                       <div className="flex items-center gap-1">
                         <input
                           type="number"
+                          aria-label={language === 'id' ? `Halaman saat ini untuk ${book.title}` : `Current page for ${book.title}`}
                           value={logPage}
                           onChange={(e) => setLogPage(parseInt(e.target.value) || 0)}
                           max={book.totalPages}

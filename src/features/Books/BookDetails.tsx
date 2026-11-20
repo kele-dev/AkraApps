@@ -468,6 +468,7 @@ export const BookDetails: React.FC = () => {
 
               <button
                 type="button"
+                aria-label={language === 'id' ? 'Pilih rak buku' : 'Choose bookshelf'}
                 onClick={() => setShowShelfDropdown(!showShelfDropdown)}
                 className={`px-2 flex items-center justify-center border-l transition-colors cursor-pointer border-none ${
                   currentShelf 
@@ -510,6 +511,7 @@ export const BookDetails: React.FC = () => {
                 <div className="flex-1 flex items-center gap-1 bg-white border border-border-light-gray rounded-lg px-2 h-8">
                   <input
                     type="number"
+                    aria-label={language === 'id' ? 'Halaman saat ini' : 'Current page'}
                     min={0}
                     max={richDetail.totalPages || 200}
                     value={inputPage !== undefined ? inputPage : (progress ? progress.currentPage : 0)}
@@ -931,6 +933,7 @@ export const BookDetails: React.FC = () => {
                     >
                       <input
                         type="text"
+                        aria-label={language === 'id' ? 'Pesan diskusi Buddy Read' : 'Buddy Read chat message'}
                         placeholder="Tulis pesan diskusi di sini..."
                         value={buddyMessageText}
                         onChange={(e) => setBuddyMessageText(e.target.value)}

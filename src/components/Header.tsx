@@ -192,6 +192,7 @@ export const Header: React.FC = () => {
           />
           <input
             type="text"
+            aria-label={language === 'id' ? "Cari buku, kutipan, atau teman" : "Search books, quotes, or friends"}
             className="input-field w-full pl-9 rounded-full h-8.5 text-xs bg-gray-100 border border-transparent py-1.5 focus-visible:ring-2 focus-visible:ring-brand-orange/35 focus:border-brand-orange focus:bg-white transition-all"
             placeholder={language === 'id' ? "Cari buku, kutipan, atau teman..." : "Search books, quotes, or friends..."}
             value={localSearch}
@@ -391,6 +392,9 @@ export const Header: React.FC = () => {
               {/* Notification Bell */}
               <div className="relative" ref={notificationRef}>
                 <button 
+                  type="button"
+                  aria-label={language === 'id' ? 'Notifikasi' : 'Notifications'}
+                  aria-expanded={showNotifications}
                   onClick={() => {
                     setShowNotifications(!showNotifications);
                     setShowDropdown(false);
