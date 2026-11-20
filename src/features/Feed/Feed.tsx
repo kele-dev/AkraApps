@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp, translations } from '../../context/AppContext';
 import { Card } from '../../components/Card';
+import { Modal } from '../../components/Modal';
 import { MessageSquare, Bookmark, Quote, BookOpen, Send, Star, ChevronDown, Check, Image, X, Heart } from 'lucide-react';
 import { compressImageFileToDataUrl } from '../../lib/storage';
 import { computePercent } from '../../lib/idAndMath';
@@ -996,10 +997,16 @@ export const Feed: React.FC = () => {
       </div>
 
       {/* ================= STORY VIEWER OVERLAY ================= */}
-      {activeStoryUserId && activeUserStories.length > 0 && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 animate-fade-in">
-          
-          {/* Inner 9:16 aspect ratio box */}
+      <Modal
+        isOpen={Boolean(activeStoryUserId && activeUserStories.length > 0)}
+        onClose={() => {
+          setActiveStoryUserId(null);
+          setActiveStoryIndex(0);
+        }}
+        ariaLabel={language === 'id' ? 'Penampil cerita' : 'Story viewer'}
+        backdropClassName="bg-black/90"
+      >
+        {activeStoryUserId && activeUserStories.length > 0 && (
           <div className="relative w-full max-w-[380px] h-[70vh] md:h-[75vh] rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-b from-[#3a2212] to-[#120a05] flex flex-col justify-between text-white p-5 animate-slide-in">
             
             {/* Top Row: Progress Indicators & Close Button */}
@@ -1090,14 +1097,21 @@ export const Feed: React.FC = () => {
             </div>
 
           </div>
-
-        </div>
-      )}
+        )}
+      </Modal>
 
       {/* ================= STORY CREATOR MODAL ================= */}
-      {showCreateStory && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-slide-in">
+      <Modal
+        isOpen={showCreateStory}
+        onClose={() => {
+          setShowCreateStory(false);
+          setStoryContent('');
+          setStoryBookTitle('');
+        }}
+        ariaLabel={language === 'id' ? 'Bagikan Cerita Anda' : 'Share Your Story'}
+        backdropClassName="bg-black/50"
+      >
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-slide-in">
             
             {/* Modal Header */}
             <div className="flex justify-between items-center px-6 py-4 border-b border-border-light-gray bg-bg-light-gray">
@@ -1184,12 +1198,16 @@ export const Feed: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
-      )}
+      </Modal>
 
       {/* ============ DELETE CONFIRMATION MODAL ============ */}
-      {deleteConfirmPostId && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+      <Modal
+        isOpen={Boolean(deleteConfirmPostId)}
+        onClose={() => setDeleteConfirmPostId(null)}
+        ariaLabel={translations[language].deleteActivityTitle}
+        backdropClassName="bg-black/60 backdrop-blur-xs"
+      >
+        {deleteConfirmPostId && (
           <Card className="max-w-xs w-full p-6 flex flex-col gap-4 animate-slide-in">
             <div className="text-center">
               <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-3 text-lg">
@@ -1220,8 +1238,8 @@ export const Feed: React.FC = () => {
               </button>
             </div>
           </Card>
-        </div>
-      )}
+        )}
+      </Modal>
 
     </div>
   );

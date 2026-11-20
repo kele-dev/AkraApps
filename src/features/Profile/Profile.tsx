@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp, translations } from '../../context/AppContext';
 import { Card } from '../../components/Card';
+import { Modal } from '../../components/Modal';
 import { ProgressBar } from '../../components/ProgressBar';
 import { 
   BookOpen, CheckCircle, Flame, FileText, ArrowLeft, Trophy, Edit2, Check, 
@@ -923,8 +924,13 @@ export const Profile: React.FC = () => {
       </div>
 
       {/* ============ DELETE CONFIRMATION MODAL ============ */}
-      {deleteConfirmPostId && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+      <Modal
+        isOpen={Boolean(deleteConfirmPostId)}
+        onClose={() => setDeleteConfirmPostId(null)}
+        ariaLabel={translations[language].deleteActivityTitle}
+        backdropClassName="bg-black/60 backdrop-blur-xs"
+      >
+        {deleteConfirmPostId && (
           <Card className="max-w-xs w-full p-6 flex flex-col gap-4 animate-slide-in">
             <div className="text-center">
               <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-3 text-lg">
@@ -955,12 +961,16 @@ export const Profile: React.FC = () => {
               </button>
             </div>
           </Card>
-        </div>
-      )}
+        )}
+      </Modal>
 
       {/* ============ EDIT PROFILE MODAL ============ */}
-      {isEditing && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in backdrop-blur-xs">
+      <Modal
+        isOpen={isEditing}
+        onClose={() => setIsEditing(false)}
+        ariaLabel="Edit Profil"
+        backdropClassName="bg-black/50 backdrop-blur-xs"
+      >
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-slide-in">
             <div className="flex justify-between items-center px-6 py-4 border-b border-border-light-gray bg-bg-light-gray">
               <h3 className="text-sm font-bold text-text-slate-dark">Edit Profil</h3>
@@ -1047,14 +1057,18 @@ export const Profile: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
-      )}
+      </Modal>
 
       {/* ============ QUICK PROGRESS MODAL ============ */}
-      {activeProgressBook && (() => {
-        const userShelves = shelves.filter(s => s.userId === currentUser.id);
-        return (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in backdrop-blur-xs">
+      <Modal
+        isOpen={Boolean(activeProgressBook)}
+        onClose={() => setActiveProgressBook(null)}
+        ariaLabel={activeProgressBook ? `Perbarui Progres: ${activeProgressBook.title}` : 'Perbarui Progres'}
+        backdropClassName="bg-black/50 backdrop-blur-xs"
+      >
+        {activeProgressBook && (() => {
+          const userShelves = shelves.filter(s => s.userId === currentUser.id);
+          return (
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-slide-in">
               <div className="flex justify-between items-center px-5 py-4 border-b border-border-light-gray bg-bg-light-gray">
                 <h3 className="text-xs font-extrabold text-text-slate-dark truncate max-w-[250px]">
@@ -1115,7 +1129,7 @@ export const Profile: React.FC = () => {
 
                 {isOwnProfile && userShelves.length > 0 && (
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-extrabold text-text-slate-medium uppercase tracking-wider">Masukkan ke Rak:</label>
+                    <span className="text-[10px] font-extrabold text-text-slate-medium uppercase tracking-wider">Masukkan ke Rak:</span>
                     <div className="flex flex-col gap-1 max-h-24 overflow-y-auto border border-border-light-gray rounded-xl p-2 bg-gray-50">
                       {userShelves.map(shelf => (
                         <label key={shelf.id} className="flex items-center gap-2 px-2 py-1 hover:bg-white rounded-md cursor-pointer text-xs font-medium text-text-slate-medium select-none">
@@ -1134,9 +1148,9 @@ export const Profile: React.FC = () => {
                 <button type="button" onClick={handleSaveQuickProgress} className="btn-primary py-1.5 px-4 text-xs font-bold rounded-lg">Simpan Progres</button>
               </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
+      </Modal>
 
     </div>
   );
