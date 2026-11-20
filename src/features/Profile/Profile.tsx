@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import type { Book, Shelf, Post } from '../../types';
 import { computePercent } from '../../lib/idAndMath';
+import { isAllowedImageMime, RASTER_IMAGE_ACCEPT } from '../../lib/uploadValidation';
+import { compressImageFileToDataUrl } from '../../lib/storage';
 
 const PRESET_AVATARS = [
   'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80',
@@ -125,11 +127,13 @@ export const Profile: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !isAllowedImageMime(file.type)) return;
     if (file.size > 2 * 1024 * 1024) { alert("Ukuran gambar terlalu besar. Maksimal 2MB."); return; }
-    const reader = new FileReader();
-    reader.onloadend = () => { if (typeof reader.result === 'string') setEditAvatar(reader.result); };
-    reader.readAsDataURL(file);
+    compressImageFileToDataUrl(file, 600, 0.8)
+      .then((dataUrl) => setEditAvatar(dataUrl))
+      .catch(() => {
+        // Ignore unreadable image files safely
+      });
   };
 
   // Filtered data
@@ -874,7 +878,7 @@ export const Profile: React.FC = () => {
                     <span className="text-white text-[9px] font-bold">Ubah</span>
                   </div>
                 </div>
-                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept={RASTER_IMAGE_ACCEPT} className="hidden" />
                 <button type="button" onClick={() => fileInputRef.current?.click()}
                   className="bg-transparent border-none text-xs font-bold text-brand-orange cursor-pointer hover:text-brand-orange-hover">
                   Unggah Gambar Baru

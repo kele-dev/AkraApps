@@ -6,6 +6,7 @@ import { Card } from '../../components/Card';
 import { MessageSquare, Bookmark, Quote, BookOpen, Send, Star, ChevronDown, Check, Image, X, Heart } from 'lucide-react';
 import { compressImageFileToDataUrl } from '../../lib/storage';
 import { computePercent } from '../../lib/idAndMath';
+import { isAllowedImageMime, RASTER_IMAGE_ACCEPT } from '../../lib/uploadValidation';
 
 export const Feed: React.FC = () => {
   const { 
@@ -125,7 +126,7 @@ export const Feed: React.FC = () => {
   };
 
   const handlePhotoChange = (file: File) => {
-    if (!file || !file.type.startsWith('image/')) return;
+    if (!file || !isAllowedImageMime(file.type)) return;
     if (file.size > 5 * 1024 * 1024) { alert('Ukuran gambar maksimal 5MB.'); return; }
     compressImageFileToDataUrl(file)
       .then((dataUrl) => setPhotoPreview(dataUrl))
@@ -310,7 +311,7 @@ export const Feed: React.FC = () => {
                 <input
                   ref={photoInputRef}
                   type="file"
-                  accept="image/*"
+                  accept={RASTER_IMAGE_ACCEPT}
                   className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoChange(f); e.target.value = ''; }}
                 />
