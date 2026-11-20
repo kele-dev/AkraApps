@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from './http';
+
 export interface SearchBookResult {
   id: string;
   title: string;
@@ -7,13 +9,20 @@ export interface SearchBookResult {
   category: string;
 }
 
+export interface SearchBooksOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
 export const searchBooksHybrid = async (
   queryText: string,
   limit: number = 10,
-  filter: 'all' | 'title' | 'author' = 'all'
+  filter: 'all' | 'title' | 'author' = 'all',
+  options: SearchBooksOptions = {}
 ): Promise<SearchBookResult[]> => {
   const cleanQuery = queryText.trim();
   if (!cleanQuery) return [];
+  const { signal, timeoutMs = 7000 } = options;
 
   // 1. Google Books API Query
   const googlePromise = (async () => {
@@ -23,7 +32,7 @@ export const searchBooksHybrid = async (
       else if (filter === 'author') googleFilter = `inauthor:${cleanQuery}`;
 
       const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(googleFilter)}&maxResults=${limit}`;
-      const response = await fetch(url);
+      const response = await fetchWithTimeout(url, { signal, timeoutMs });
       if (response.ok) {
         const data = await response.json();
         if (data.items) {
@@ -42,7 +51,9 @@ export const searchBooksHybrid = async (
         }
       }
     } catch (e) {
-      console.warn("Google Books API query failed:", e);
+      if ((e as { name?: string })?.name !== 'AbortError') {
+        console.warn("Google Books API query failed:", e);
+      }
     }
     return [];
   })();
@@ -55,7 +66,7 @@ export const searchBooksHybrid = async (
       else if (filter === 'author') apiFilterParam = 'author';
 
       const url = `https://openlibrary.org/search.json?${apiFilterParam}=${encodeURIComponent(cleanQuery)}&limit=${limit}`;
-      const response = await fetch(url);
+      const response = await fetchWithTimeout(url, { signal, timeoutMs });
       if (response.ok) {
         const data = await response.json();
         if (data.docs) {
@@ -75,7 +86,9 @@ export const searchBooksHybrid = async (
         }
       }
     } catch (e) {
-      console.warn("Open Library API query failed:", e);
+      if ((e as { name?: string })?.name !== 'AbortError') {
+        console.warn("Open Library API query failed:", e);
+      }
     }
     return [];
   })();

@@ -6,6 +6,7 @@ import { getRichBookDetail, RichBookDetail, RICH_BOOK_DATABASE } from './bookDet
 import { ArrowLeft, Star, Share2, ChevronDown, ChevronUp, Pen, Check } from 'lucide-react';
 import { ProgressBar } from '../../components/ProgressBar';
 import { computePercent } from '../../lib/idAndMath';
+import { fetchWithTimeout } from '../../lib/http';
 
 export const BookDetails: React.FC = () => {
   const { 
@@ -68,6 +69,7 @@ export const BookDetails: React.FC = () => {
     if (!selectedBook) return;
 
     let active = true;
+    const controller = new AbortController();
     setIsLoading(true);
     setIsDescExpanded(false);
     setIsEditionsExpanded(false);
@@ -87,7 +89,7 @@ export const BookDetails: React.FC = () => {
         if (!workId.startsWith('/')) {
           try {
             const searchUrl = `https://openlibrary.org/search.json?title=${encodeURIComponent(selectedBook.title)}&author=${encodeURIComponent(selectedBook.author)}&limit=1`;
-            const searchRes = await fetch(searchUrl);
+            const searchRes = await fetchWithTimeout(searchUrl, { signal: controller.signal });
             if (searchRes.ok) {
               const searchData = await searchRes.json();
               if (searchData.docs && searchData.docs.length > 0) {
@@ -95,14 +97,16 @@ export const BookDetails: React.FC = () => {
               }
             }
           } catch (err) {
-            console.warn("Failed to lookup local book online:", err);
+            if ((err as { name?: string })?.name !== 'AbortError') {
+              console.warn("Failed to lookup local book online:", err);
+            }
           }
         }
 
         // If it starts with /works/ or /books/, fetch from Open Library
         if (workId.startsWith('/')) {
           const workUrl = `https://openlibrary.org${workId}.json`;
-          const workRes = await fetch(workUrl);
+          const workRes = await fetchWithTimeout(workUrl, { signal: controller.signal });
           if (!workRes.ok) throw new Error("Gagal mengambil data buku dari Open Library");
           const workData = await workRes.json();
 
@@ -127,7 +131,7 @@ export const BookDetails: React.FC = () => {
           
           try {
             const ratingsUrl = `https://openlibrary.org${workId}/ratings.json`;
-            const ratingsRes = await fetch(ratingsUrl);
+            const ratingsRes = await fetchWithTimeout(ratingsUrl, { signal: controller.signal });
             if (ratingsRes.ok) {
               const ratingsData = await ratingsRes.json();
               if (ratingsData.summary) {
@@ -140,7 +144,9 @@ export const BookDetails: React.FC = () => {
               }
             }
           } catch (err) {
-            console.warn("Failed to fetch ratings from Open Library API:", err);
+            if ((err as { name?: string })?.name !== 'AbortError') {
+              console.warn("Failed to fetch ratings from Open Library API:", err);
+            }
           }
 
           const reviewsCount = Math.max(1, Math.floor(ratingsCount * (0.04 + (seed % 3) * 0.01)));
@@ -152,7 +158,7 @@ export const BookDetails: React.FC = () => {
           let binding = "Paperback";
           try {
             const editionsUrl = `https://openlibrary.org${workId}/editions.json?limit=10`;
-            const editionsRes = await fetch(editionsUrl);
+            const editionsRes = await fetchWithTimeout(editionsUrl, { signal: controller.signal });
             if (editionsRes.ok) {
               const editionsData = await editionsRes.json();
               if (editionsData.entries && editionsData.entries.length > 0) {
@@ -171,7 +177,9 @@ export const BookDetails: React.FC = () => {
               }
             }
           } catch (err) {
-            console.warn("Failed to fetch edition details:", err);
+            if ((err as { name?: string })?.name !== 'AbortError') {
+              console.warn("Failed to fetch edition details:", err);
+            }
           }
 
           // Fetch Author profile
@@ -184,7 +192,7 @@ export const BookDetails: React.FC = () => {
             try {
               const authorKey = workData.authors[0].author.key;
               const authorUrl = `https://openlibrary.org${authorKey}.json`;
-              const authorRes = await fetch(authorUrl);
+              const authorRes = await fetchWithTimeout(authorUrl, { signal: controller.signal });
               if (authorRes.ok) {
                 const authorData = await authorRes.json();
                 authorName = authorData.name || authorData.personal_name || authorName;
@@ -257,6 +265,7 @@ export const BookDetails: React.FC = () => {
 
     return () => {
       active = false;
+      controller.abort();
     };
   }, [selectedBook, readingProgress, currentUser]);
 

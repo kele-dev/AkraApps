@@ -68,10 +68,14 @@ export const Header: React.FC = () => {
       return;
     }
 
-    setIsSearchingOnline(true);
+    const controller = new AbortController();
     const delayDebounceFn = setTimeout(async () => {
+      setIsSearchingOnline(true);
       try {
-        const results = await searchBooksHybrid(trimmedQuery, 5);
+        const results = await searchBooksHybrid(trimmedQuery, 5, 'all', {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
         
         // Filter out duplicates (already in books or LOCAL_BOOK_DATABASE)
         const filteredResults = results.filter((onlineBook: any) => {
@@ -88,13 +92,20 @@ export const Header: React.FC = () => {
 
         setOnlineSuggestions(filteredResults);
       } catch (err) {
-        console.warn("Gagal mengambil saran pencarian online:", err);
+        if ((err as { name?: string })?.name !== 'AbortError') {
+          console.warn("Gagal mengambil saran pencarian online:", err);
+        }
       } finally {
-        setIsSearchingOnline(false);
+        if (!controller.signal.aborted) {
+          setIsSearchingOnline(false);
+        }
       }
     }, 600); // 600ms debounce
 
-    return () => clearTimeout(delayDebounceFn);
+    return () => {
+      clearTimeout(delayDebounceFn);
+      controller.abort();
+    };
   }, [localSearch, books]);
 
   const query = localSearch.trim().toLowerCase();
