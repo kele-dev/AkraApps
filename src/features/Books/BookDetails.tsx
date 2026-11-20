@@ -42,6 +42,7 @@ export const BookDetails: React.FC = () => {
   const [animatingStar, setAnimatingStar] = useState<number | null>(null);
   
   const [buddyMessageText, setBuddyMessageText] = useState('');
+  const [followedAuthors, setFollowedAuthors] = useState<string[]>([]);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll chat box when a message is added
@@ -773,8 +774,31 @@ export const BookDetails: React.FC = () => {
                       ✓
                     </span>
                   </div>
-                  <button type="button" className="px-5 py-1 text-xs font-bold text-white bg-black rounded-full hover:bg-neutral-800 transition-colors cursor-pointer border-none shadow-3xs active-pop">
-                    Follow
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const isFollowed = followedAuthors.includes(richDetail.author);
+                      setFollowedAuthors((prev) =>
+                        isFollowed
+                          ? prev.filter((a) => a !== richDetail.author)
+                          : [...prev, richDetail.author]
+                      );
+                      showToast(
+                        isFollowed
+                          ? (language === 'id' ? `Berhenti mengikuti ${richDetail.author}` : `Unfollowed ${richDetail.author}`)
+                          : (language === 'id' ? `Mengikuti ${richDetail.author}` : `Following ${richDetail.author}`),
+                        'success'
+                      );
+                    }}
+                    className={`px-5 py-1 text-xs font-bold rounded-full transition-colors cursor-pointer border-none shadow-3xs active-pop ${
+                      followedAuthors.includes(richDetail.author)
+                        ? 'bg-brand-orange text-white hover:bg-brand-orange-hover'
+                        : 'text-white bg-black hover:bg-neutral-800'
+                    }`}
+                  >
+                    {followedAuthors.includes(richDetail.author)
+                      ? (language === 'id' ? 'Mengikuti' : 'Following')
+                      : 'Follow'}
                   </button>
                 </div>
                 

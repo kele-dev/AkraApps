@@ -46,7 +46,9 @@ export const Profile: React.FC = () => {
     users,
     deletePost,
     language,
-    showToast
+    showToast,
+    buddyReads,
+    addComment
   } = useApp();
 
   const targetUser = viewedUser || currentUser;
@@ -88,6 +90,8 @@ export const Profile: React.FC = () => {
   const [newShelfName, setNewShelfName] = useState('');
   const [expandedShelfId, setExpandedShelfId] = useState<string | null>(null);
   const [deleteConfirmPostId, setDeleteConfirmPostId] = useState<string | null>(null);
+  const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
+  const [profileCommentText, setProfileCommentText] = useState('');
 
   // Sync goal target
   useEffect(() => {
@@ -354,7 +358,26 @@ export const Profile: React.FC = () => {
                 </button>
               )}
 
-              <button className="flex items-center gap-2 py-2 px-5 text-xs font-bold rounded-lg bg-white text-text-slate-dark border border-border-light-gray hover:bg-gray-50 transition-all cursor-pointer">
+              <button
+                type="button"
+                onClick={() => {
+                  const shared = buddyReads.find(
+                    (br) => br.userIds.includes(currentUser.id) && br.userIds.includes(targetUser.id)
+                  );
+                  const sharedBook = shared ? books.find((b) => b.id === shared.bookId) : null;
+                  if (sharedBook) {
+                    viewBookDetails(sharedBook);
+                  } else {
+                    showToast(
+                      language === 'id'
+                        ? `Buka detail buku untuk mengundang ${targetUser.displayName} ke obrolan Buddy Read.`
+                        : `Open a book details page to invite ${targetUser.displayName} to Buddy Read chat.`,
+                      'info'
+                    );
+                  }
+                }}
+                className="flex items-center gap-2 py-2 px-5 text-xs font-bold rounded-lg bg-white text-text-slate-dark border border-border-light-gray hover:bg-gray-50 transition-all cursor-pointer"
+              >
                 <MessageCircle size={14} />
                 Pesan
               </button>
@@ -751,7 +774,14 @@ export const Profile: React.FC = () => {
                         {post.likes.length > 0 && <span>{post.likes.length}</span>}
                         <span>{translations[language].like}</span>
                       </button>
-                      <button className="flex items-center gap-1.5 text-[11px] font-bold text-text-slate-light hover:text-text-slate-medium bg-transparent border-none cursor-pointer transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveCommentPostId(activeCommentPostId === post.id ? null : post.id);
+                          setProfileCommentText('');
+                        }}
+                        className="flex items-center gap-1.5 text-[11px] font-bold text-text-slate-light hover:text-text-slate-medium bg-transparent border-none cursor-pointer transition-colors"
+                      >
                         <MessageSquare size={14} />
                         {post.comments.length > 0 && <span>{post.comments.length}</span>}
                         <span>{translations[language].comment}</span>
@@ -766,6 +796,30 @@ export const Profile: React.FC = () => {
                         </button>
                       )}
                     </div>
+                    {activeCommentPostId === post.id && (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (!profileCommentText.trim()) return;
+                          addComment(post.id, profileCommentText);
+                          setProfileCommentText('');
+                          setActiveCommentPostId(null);
+                        }}
+                        className="flex gap-2 mt-3"
+                      >
+                        <input
+                          type="text"
+                          value={profileCommentText}
+                          onChange={(e) => setProfileCommentText(e.target.value)}
+                          placeholder={translations[language].writeCommentPlaceholder}
+                          aria-label={translations[language].writeCommentPlaceholder}
+                          className="input-field flex-1 px-3 py-1.5 text-xs"
+                        />
+                        <button type="submit" className="btn-primary py-1.5 px-3 text-xs">
+                          {language === 'id' ? 'Kirim' : 'Send'}
+                        </button>
+                      </form>
+                    )}
                   </div>
                 );
               })

@@ -78,6 +78,12 @@ export const Feed: React.FC = () => {
   
   // Comment State (per post)
   const [commentInputs, setCommentInputs] = useState<{ [postId: string]: string }>({});
+  const commentInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Feed filter / customize state
+  const [showCustomizeFilter, setShowCustomizeFilter] = useState(false);
+  const [feedFilter, setFeedFilter] = useState<'ALL' | 'QUOTE' | 'THOUGHT' | 'PHOTO' | 'PROGRESS_UPDATE'>('ALL');
+  const [openShelfMenuPostId, setOpenShelfMenuPostId] = useState<string | null>(null);
 
   // Quick Progress Logger State in Sidebar widget
   const [activeLogBookId, setActiveLogBookId] = useState<string | null>(null);
@@ -186,6 +192,8 @@ export const Feed: React.FC = () => {
 
   // Recommendations (Mock)
   const recommendedBook = books.find((b) => b.id === 'b4') || books[0];
+
+  const filteredFeedPosts = feedFilter === 'ALL' ? posts : posts.filter((p) => p.type === feedFilter);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-[2.2fr_1fr] gap-8 items-start animate-fade-in">
@@ -374,13 +382,45 @@ export const Feed: React.FC = () => {
         </Card>
 
         {/* Updates list header */}
-        <div className="flex justify-between border-b border-border-light-gray pb-2">
-          <h3 className="text-sm font-bold text-text-slate-dark">{translations[language].updates}</h3>
-          <span className="text-xs text-text-slate-medium cursor-pointer hover:underline">{language === 'id' ? 'Kustomisasi' : 'Customize'}</span>
+        <div className="flex flex-col gap-2 border-b border-border-light-gray pb-2">
+          <div className="flex justify-between items-center">
+            <h3 className="text-sm font-bold text-text-slate-dark">{translations[language].updates}</h3>
+            <button
+              type="button"
+              onClick={() => setShowCustomizeFilter((prev) => !prev)}
+              className="text-xs text-text-slate-medium cursor-pointer hover:underline bg-transparent border-none font-semibold"
+            >
+              {language === 'id' ? 'Kustomisasi' : 'Customize'}
+            </button>
+          </div>
+          {showCustomizeFilter && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {([
+                { id: 'ALL', label: language === 'id' ? 'Semua' : 'All' },
+                { id: 'QUOTE', label: language === 'id' ? 'Kutipan' : 'Quotes' },
+                { id: 'THOUGHT', label: language === 'id' ? 'Ulasan' : 'Reviews' },
+                { id: 'PHOTO', label: language === 'id' ? 'Foto' : 'Photos' },
+                { id: 'PROGRESS_UPDATE', label: language === 'id' ? 'Progres' : 'Progress' },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setFeedFilter(opt.id)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-bold border cursor-pointer transition-colors ${
+                    feedFilter === opt.id
+                      ? 'bg-brand-orange text-white border-brand-orange'
+                      : 'bg-white text-text-slate-medium border-border-light-gray hover:border-brand-orange'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Feed Posts */}
-        {posts.map((post) => {
+        {filteredFeedPosts.map((post) => {
           const isLiked = post.likes.includes(currentUser.id);
           const postBook = books.find((b) => b.id === post.bookId);
           
@@ -516,7 +556,11 @@ export const Feed: React.FC = () => {
                   >
                     {translations[language].like}
                   </button>
-                  <button className="bg-transparent border-none font-semibold text-text-slate-medium hover:text-text-slate-dark cursor-pointer active-pop">
+                  <button
+                    type="button"
+                    onClick={() => commentInputRefs.current[post.id]?.focus()}
+                    className="bg-transparent border-none font-semibold text-text-slate-medium hover:text-text-slate-dark cursor-pointer active-pop"
+                  >
                     {translations[language].comment}
                   </button>
                   <button
@@ -570,14 +614,53 @@ export const Feed: React.FC = () => {
                   </div>
 
                   {/* Want to Read button */}
-                  <div className="flex shrink-0">
-                    <button className="bg-[#403020] text-white rounded-l border-none px-3 py-1.5 text-[10px] font-extrabold hover:bg-[#504030] cursor-pointer flex items-center gap-1.5">
-                      {translations[language].wantToRead}
-                    </button>
-                    <button className="bg-[#403020] text-white rounded-r border-none border-l border-white/20 px-1.5 py-1.5 text-[10px] hover:bg-[#504030] cursor-pointer flex items-center justify-center">
-                      <ChevronDown size={10} />
-                    </button>
-                  </div>
+                  {postBook && (
+                    <div className="relative flex shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateProgress(postBook.id, 0, 'WANT_TO_READ');
+                          setOpenShelfMenuPostId(null);
+                        }}
+                        className="bg-[#403020] text-white rounded-l border-none px-3 py-1.5 text-[10px] font-extrabold hover:bg-[#504030] cursor-pointer flex items-center gap-1.5"
+                      >
+                        {translations[language].wantToRead}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={language === 'id' ? 'Pilih status rak buku' : 'Choose bookshelf status'}
+                        onClick={() => setOpenShelfMenuPostId(openShelfMenuPostId === post.id ? null : post.id)}
+                        className="bg-[#403020] text-white rounded-r border-none border-l border-white/20 px-1.5 py-1.5 text-[10px] hover:bg-[#504030] cursor-pointer flex items-center justify-center"
+                      >
+                        <ChevronDown size={10} />
+                      </button>
+                      {openShelfMenuPostId === post.id && (
+                        <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-border-light-gray rounded-md shadow-md p-1 z-30">
+                          {([
+                            { id: 'WANT_TO_READ', label: translations[language].wantToRead },
+                            { id: 'READING', label: translations[language].currentlyReading },
+                            { id: 'COMPLETED', label: translations[language].read },
+                          ] as const).map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => {
+                                updateProgress(
+                                  postBook.id,
+                                  opt.id === 'COMPLETED' ? postBook.totalPages : 0,
+                                  opt.id
+                                );
+                                setOpenShelfMenuPostId(null);
+                              }}
+                              className="w-full text-left px-2.5 py-1.5 text-[11px] font-semibold text-text-slate-dark hover:bg-gray-100 rounded bg-transparent border-none cursor-pointer"
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -618,6 +701,7 @@ export const Feed: React.FC = () => {
                   />
                   <div className="flex-1 relative">
                     <input
+                      ref={(el) => { commentInputRefs.current[post.id] = el; }}
                       type="text"
                       className="input-field w-full pr-9 text-xs bg-white border border-border-light-gray rounded-md h-8 focus-visible:ring-2 focus-visible:ring-brand-orange/40 focus:border-brand-orange transition-all"
                       placeholder="Tulis komentar..."
@@ -716,7 +800,7 @@ export const Feed: React.FC = () => {
           )}
 
           <div className="border-t border-border-light-gray mt-4 pt-2 flex gap-2 text-[10px] text-text-slate-medium">
-            <span className="hover:underline cursor-pointer">{translations[language].viewAll}</span> • <span className="hover:underline cursor-pointer" onClick={() => setCurrentTab('books')}>{translations[language].addBook}</span>
+            <button type="button" onClick={() => setCurrentTab('books')} className="hover:underline cursor-pointer bg-transparent border-none p-0 text-[10px] text-text-slate-medium">{translations[language].viewAll}</button> • <button type="button" className="hover:underline cursor-pointer bg-transparent border-none p-0 text-[10px] text-text-slate-medium" onClick={() => setCurrentTab('books')}>{translations[language].addBook}</button>
           </div>
         </Card>        {/* WIDGET 2: RECOMMENDATION FROM BOOKMATES */}
         <Card hoverable={false} className="p-4">
@@ -831,7 +915,14 @@ export const Feed: React.FC = () => {
             </div>
           </div>
 
-          <button className="btn-secondary w-full justify-center py-1 px-3 rounded-full text-xs mt-4">
+          <button
+            type="button"
+            onClick={() => {
+              setViewedUser(null);
+              setCurrentTab('profile');
+            }}
+            className="btn-secondary w-full justify-center py-1 px-3 rounded-full text-xs mt-4"
+          >
             {language === 'id' ? 'Lihat Target' : 'View Target'}
           </button>
         </Card>

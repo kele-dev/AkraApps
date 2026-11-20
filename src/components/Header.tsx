@@ -26,7 +26,9 @@ export const Header: React.FC = () => {
     markAllNotificationsRead,
     viewBookDetails,
     language,
-    setLanguage
+    setLanguage,
+    buddyReads,
+    showToast
   } = useApp();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -488,11 +490,35 @@ export const Header: React.FC = () => {
                 )}
               </div>
               
-              <button className="hidden sm:flex bg-transparent border-none cursor-pointer text-text-slate-medium p-1.5 rounded-full items-center justify-center hover:bg-gray-100 transition-colors">
+              <button
+                type="button"
+                onClick={() => {
+                  const myBuddy = buddyReads.find((br) => br.userIds.includes(currentUser.id));
+                  const buddyBook = myBuddy ? books.find((b) => b.id === myBuddy.bookId) : null;
+                  if (buddyBook) {
+                    viewBookDetails(buddyBook);
+                  } else {
+                    setCurrentTab('books');
+                    showToast(
+                      language === 'id'
+                        ? 'Pilih buku lalu undang teman untuk mulai chat Buddy Read.'
+                        : 'Select a book and invite a friend to start Buddy Read chat.',
+                      'info'
+                    );
+                  }
+                }}
+                aria-label={language === 'id' ? 'Pesan Buddy Read' : 'Buddy Read Messages'}
+                className="hidden sm:flex bg-transparent border-none cursor-pointer text-text-slate-medium p-1.5 rounded-full items-center justify-center hover:bg-gray-100 transition-colors"
+              >
                 <MessageSquare size={20} className="text-brand-orange" />
               </button>
               
-              <button className="hidden sm:flex bg-transparent border-none cursor-pointer text-text-slate-medium p-1.5 rounded-full items-center justify-center hover:bg-gray-100 transition-colors">
+              <button
+                type="button"
+                onClick={() => setCurrentTab('search')}
+                aria-label={language === 'id' ? 'Temukan Teman & Grup' : 'Find Friends & Groups'}
+                className="hidden sm:flex bg-transparent border-none cursor-pointer text-text-slate-medium p-1.5 rounded-full items-center justify-center hover:bg-gray-100 transition-colors"
+              >
                 <Users size={20} className="text-brand-orange" />
               </button>
 

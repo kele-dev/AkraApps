@@ -193,7 +193,135 @@ export const Books: React.FC = () => {
             {translations[language].libraryDesc}
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowAddForm(true)}
+          className="btn-primary text-xs"
+        >
+          <Plus size={14} />
+          {translations[language].addBook}
+        </button>
       </div>
+
+      {showAddForm && (
+        <Card hoverable={false} className="p-5 flex flex-col gap-4 border-brand-orange/30">
+          <div className="flex justify-between items-center border-b border-border-light-gray pb-2">
+            <h3 className="text-sm font-bold text-text-slate-dark">{translations[language].addBook}</h3>
+            <button
+              type="button"
+              onClick={handleCloseForm}
+              className="text-xs font-bold text-text-slate-medium hover:text-text-slate-dark bg-transparent border-none cursor-pointer"
+            >
+              {translations[language].cancel}
+            </button>
+          </div>
+
+          {!isManualInput && (
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={translations[language].searchPlaceholder}
+                  aria-label={translations[language].searchPlaceholder}
+                  className="input-field flex-1 px-3 py-2 text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleApiSearch()}
+                  disabled={isSearching}
+                  className="btn-secondary text-xs"
+                >
+                  {isSearching ? '...' : (language === 'id' ? 'Cari' : 'Search')}
+                </button>
+              </div>
+              {searchWarning && (
+                <p className="text-[11px] text-brand-orange font-semibold">{searchWarning}</p>
+              )}
+              {searchResults.length > 0 && (
+                <div className="flex flex-col divide-y divide-border-light-gray border border-border-light-gray rounded-lg max-h-48 overflow-y-auto">
+                  {searchResults.map((res) => (
+                    <button
+                      key={res.id}
+                      type="button"
+                      onClick={() => handleSelectSearchResult(res)}
+                      className="text-left px-3 py-2 hover:bg-bg-light-gray bg-white border-none cursor-pointer flex justify-between items-center text-xs"
+                    >
+                      <span className="font-bold text-text-slate-dark truncate">{res.title}</span>
+                      <span className="text-text-slate-medium shrink-0 ml-2">{res.author}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsManualInput(true)}
+                className="self-start text-[11px] font-bold text-brand-orange bg-transparent border-none cursor-pointer hover:underline"
+              >
+                {language === 'id' ? 'Atau isi detail buku secara manual' : 'Or enter book details manually'}
+              </button>
+            </div>
+          )}
+
+          <form onSubmit={handleAddBook} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input
+              type="text"
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={language === 'id' ? 'Judul buku' : 'Book title'}
+              aria-label={language === 'id' ? 'Judul buku' : 'Book title'}
+              className="input-field px-3 py-2 text-xs"
+            />
+            <input
+              type="text"
+              required
+              value={author}
+              onChange={(e) => setAuthor(e.target.value)}
+              placeholder={language === 'id' ? 'Penulis' : 'Author'}
+              aria-label={language === 'id' ? 'Penulis' : 'Author'}
+              className="input-field px-3 py-2 text-xs"
+            />
+            <input
+              type="number"
+              min={1}
+              required
+              value={totalPages}
+              onChange={(e) => setTotalPages(parseInt(e.target.value, 10) || 1)}
+              placeholder={language === 'id' ? 'Total halaman' : 'Total pages'}
+              aria-label={language === 'id' ? 'Total halaman' : 'Total pages'}
+              className="input-field px-3 py-2 text-xs"
+            />
+            <input
+              type="text"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder={language === 'id' ? 'Kategori (opsional)' : 'Category (optional)'}
+              aria-label={language === 'id' ? 'Kategori' : 'Category'}
+              className="input-field px-3 py-2 text-xs"
+            />
+            <input
+              type="number"
+              min={0}
+              max={totalPages}
+              value={pagesRead}
+              onChange={(e) => setPagesRead(parseInt(e.target.value, 10) || 0)}
+              placeholder={language === 'id' ? 'Halaman sudah dibaca' : 'Pages read'}
+              aria-label={language === 'id' ? 'Halaman sudah dibaca' : 'Pages read'}
+              className="input-field px-3 py-2 text-xs"
+            />
+            <div className="flex justify-end gap-2 sm:col-span-2">
+              <button type="button" onClick={handleCloseForm} className="btn-secondary text-xs">
+                {translations[language].cancel}
+              </button>
+              <button type="submit" className="btn-primary text-xs">
+                {translations[language].simpan}
+              </button>
+            </div>
+          </form>
+        </Card>
+      )}
 
       {/* Shelf Filter Navigation */}
       <div className="flex gap-2 border-b border-border-light-gray pb-2 overflow-x-auto">
