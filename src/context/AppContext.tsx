@@ -82,6 +82,9 @@ interface AppContextProps {
   setLanguage: (lang: 'id' | 'en') => void;
   actionError: string | null;
   clearActionError: () => void;
+  toast: { message: string; type: 'success' | 'error' | 'info' } | null;
+  showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
+  clearToast: () => void;
 }
 
 const AppContext = createContext<AppContextProps | undefined>(undefined);
@@ -119,6 +122,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [language, setLanguageState] = useState<'id' | 'en'>('id');
   const [actionError, setActionError] = useState<string | null>(null);
   const clearActionError = () => setActionError(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const clearToast = () => setToast(null);
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   // Load language preference on load
   useEffect(() => {
@@ -890,6 +904,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setLanguage,
         actionError,
         clearActionError,
+        toast,
+        showToast,
+        clearToast,
       }}
     >
       {children}

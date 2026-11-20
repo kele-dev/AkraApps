@@ -25,7 +25,8 @@ export const BookDetails: React.FC = () => {
     startBuddyRead,
     addBuddyMessage,
     viewBookDetails,
-    language
+    language,
+    showToast
   } = useApp();
 
   const [richDetail, setRichDetail] = useState<RichBookDetail | null>(null);
@@ -330,9 +331,10 @@ export const BookDetails: React.FC = () => {
     } else if (navigator.clipboard?.writeText) {
       try {
         await navigator.clipboard.writeText(window.location.href);
-        alert('Tautan halaman disalin ke papan klip!');
+        showToast(language === 'id' ? 'Tautan halaman disalin ke papan klip!' : 'Page link copied to clipboard!', 'success');
       } catch (err) {
         console.warn('Clipboard write failed:', err);
+        showToast(language === 'id' ? 'Gagal menyalin tautan.' : 'Failed to copy link.', 'error');
       }
     }
   };

@@ -28,7 +28,8 @@ export const Feed: React.FC = () => {
     savedPostIds,
     toggleSavePost,
     deletePost,
-    language
+    language,
+    showToast
   } = useApp();
   
   // Post creator state
@@ -126,12 +127,18 @@ export const Feed: React.FC = () => {
   };
 
   const handlePhotoChange = (file: File) => {
-    if (!file || !isAllowedImageMime(file.type)) return;
-    if (file.size > 5 * 1024 * 1024) { alert('Ukuran gambar maksimal 5MB.'); return; }
+    if (!file || !isAllowedImageMime(file.type)) {
+      showToast(language === 'id' ? 'Format foto harus JPG, PNG, WebP, atau GIF.' : 'Photo format must be JPG, PNG, WebP, or GIF.', 'error');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast(language === 'id' ? 'Ukuran gambar maksimal 5MB.' : 'Maximum image size is 5MB.', 'error');
+      return;
+    }
     compressImageFileToDataUrl(file)
       .then((dataUrl) => setPhotoPreview(dataUrl))
       .catch(() => {
-        // Ignore unreadable image files safely
+        showToast(language === 'id' ? 'Gagal membaca file gambar.' : 'Failed to read image file.', 'error');
       });
   };
 

@@ -45,7 +45,8 @@ export const Profile: React.FC = () => {
     isFollowing,
     users,
     deletePost,
-    language
+    language,
+    showToast
   } = useApp();
 
   const targetUser = viewedUser || currentUser;
@@ -127,12 +128,19 @@ export const Profile: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !isAllowedImageMime(file.type)) return;
-    if (file.size > 2 * 1024 * 1024) { alert("Ukuran gambar terlalu besar. Maksimal 2MB."); return; }
+    if (!file) return;
+    if (!isAllowedImageMime(file.type)) {
+      showToast(language === 'id' ? 'Format foto harus JPG, PNG, WebP, atau GIF.' : 'Photo format must be JPG, PNG, WebP, or GIF.', 'error');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      showToast(language === 'id' ? 'Ukuran gambar terlalu besar. Maksimal 2MB.' : 'Image is too large. Maximum 2MB.', 'error');
+      return;
+    }
     compressImageFileToDataUrl(file, 600, 0.8)
       .then((dataUrl) => setEditAvatar(dataUrl))
       .catch(() => {
-        // Ignore unreadable image files safely
+        showToast(language === 'id' ? 'Gagal membaca file gambar.' : 'Failed to read image file.', 'error');
       });
   };
 

@@ -12,7 +12,7 @@ import { BottomNav } from '../components/BottomNav';
 import { AnimatedBook } from '../components/AnimatedBook';
 
 export default function Home() {
-  const { currentTab, isLoggedIn, isLoaded, actionError, clearActionError } = useApp();
+  const { currentTab, isLoggedIn, isLoaded, actionError, clearActionError, toast, clearToast } = useApp();
 
   if (!isLoaded) {
     return (
@@ -64,6 +64,34 @@ export default function Home() {
 
       {/* Bottom Nav Bar for Mobile */}
       <BottomNav />
+
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-20 md:bottom-6 right-5 z-50 max-w-xs animate-slide-in"
+        >
+          <div
+            className={`flex items-center gap-3 px-4 py-2.5 rounded-xl shadow-lg border text-xs font-semibold ${
+              toast.type === 'error'
+                ? 'bg-red-50 border-red-200 text-red-700'
+                : toast.type === 'success'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : 'bg-white border-border-light-gray text-text-slate-dark'
+            }`}
+          >
+            <span>{toast.message}</span>
+            <button
+              type="button"
+              onClick={clearToast}
+              aria-label="Tutup notifikasi"
+              className="bg-transparent border-none cursor-pointer font-bold text-current"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

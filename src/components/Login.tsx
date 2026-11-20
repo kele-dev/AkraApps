@@ -7,15 +7,24 @@ import { AnimatedBook } from './AnimatedBook';
 import { isDemoMode, firebaseConfigError } from '../lib/firebase';
 
 export const Login: React.FC = () => {
-  const { loginWithGoogle } = useApp();
+  const { loginWithGoogle, language } = useApp();
   const [isLoading, setIsLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const handleLogin = async () => {
     setIsLoading(true);
+    setLoginError(null);
     try {
       await loginWithGoogle();
     } catch (error) {
       console.error("Login failed:", error);
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : language === 'id'
+            ? 'Gagal masuk dengan Google. Silakan coba lagi.'
+            : 'Failed to sign in with Google. Please try again.';
+      setLoginError(message);
     } finally {
       setIsLoading(false);
     }
@@ -82,6 +91,15 @@ export const Login: React.FC = () => {
               )}
               <span>Masuk dengan Google</span>
             </button>
+
+            {loginError && (
+              <div
+                role="alert"
+                className="mt-3 text-left text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5"
+              >
+                {loginError}
+              </div>
+            )}
           </div>
 
           <div className="mt-6 text-[10px] text-text-slate-light font-medium tracking-wide">
