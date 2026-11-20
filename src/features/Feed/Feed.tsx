@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useApp, translations } from '../../context/AppContext';
 import { Card } from '../../components/Card';
 import { MessageSquare, Bookmark, Quote, BookOpen, Send, Star, ChevronDown, Check, Image, X, Heart } from 'lucide-react';
+import { compressImageFileToDataUrl } from '../../lib/storage';
 
 export const Feed: React.FC = () => {
   const { 
@@ -125,11 +126,11 @@ export const Feed: React.FC = () => {
   const handlePhotoChange = (file: File) => {
     if (!file || !file.type.startsWith('image/')) return;
     if (file.size > 5 * 1024 * 1024) { alert('Ukuran gambar maksimal 5MB.'); return; }
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === 'string') setPhotoPreview(reader.result);
-    };
-    reader.readAsDataURL(file);
+    compressImageFileToDataUrl(file)
+      .then((dataUrl) => setPhotoPreview(dataUrl))
+      .catch(() => {
+        // Ignore unreadable image files safely
+      });
   };
 
   const handleCommentSubmit = (postId: string) => {

@@ -7,6 +7,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, doc, setDoc, getDoc, getDocs, query, where, limit, deleteDoc } from 'firebase/firestore';
 import { canDeletePost, filterOwnedRecordsForSync, FIRESTORE_QUERY_LIMITS } from '../lib/firestoreSync';
 import { computeProgressTransition } from '../lib/progressUtils';
+import { safeStorageGet, safeStorageRemove, safeStorageSet } from '../lib/storage';
 
 // Helper to recursively clean undefined values for Firestore
 const cleanUndefined = (obj: any): any => {
@@ -105,14 +106,8 @@ const getInitialBuddyMessages = (currentUserId: string, currentUserDisplayName: 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Merge localStorage users with INITIAL_USERS to include new social fields
   const mergedInitialUsers = INITIAL_USERS.map(initialUser => {
-    const stored = typeof window !== 'undefined' 
-      ? localStorage.getItem(`akra_user_${initialUser.id}`) 
-      : null;
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return { ...initialUser, ...parsed }; // INITIAL_USERS provides new fields as defaults
-    }
-    return initialUser;
+    const parsed = safeStorageGet<Partial<User> | null>(`akra_user_${initialUser.id}`, null);
+    return parsed ? { ...initialUser, ...parsed } : initialUser;
   });
   const [users, setUsers] = useState<User[]>(mergedInitialUsers);
   const [currentUser, setCurrentUser] = useState<User>(GUEST_USER);
@@ -122,15 +117,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Load language preference on load
   useEffect(() => {
-    const savedLang = localStorage.getItem('akra_language');
-    if (savedLang === 'id' || savedLang === 'en') {
-      setLanguageState(savedLang);
+    try {
+      const savedLang = typeof window !== 'undefined' ? localStorage.getItem('akra_language') : null;
+      if (savedLang === 'id' || savedLang === 'en') {
+        setLanguageState(savedLang);
+      }
+    } catch {
+      // Ignore storage access failures
     }
   }, []);
 
   const setLanguage = (lang: 'id' | 'en') => {
     setLanguageState(lang);
-    localStorage.setItem('akra_language', lang);
+    try {
+      if (typeof window !== 'undefined') localStorage.setItem('akra_language', lang);
+    } catch {
+      // Ignore storage access failures
+    }
   };
   
   // Browsing Profiles state
@@ -164,11 +167,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // 1. Listen to Real Firebase Auth (if not demo mode)
   useEffect(() => {
     if (isDemoMode) {
-      // Load user session from LocalStorage
-      const savedUser = localStorage.getItem('akra_current_user');
-      if (savedUser) {
-        const parsed = JSON.parse(savedUser);
-        // Merge with INITIAL_USERS to populate any new fields (like social fields)
+      // Load user session from LocalStorage safely
+      const parsed = safeStorageGet<User | null>('akra_current_user', null);
+      if (parsed && typeof parsed === 'object' && parsed.id) {
         const initialMatch = INITIAL_USERS.find(u => u.id === parsed.id);
         const mergedUser = initialMatch ? { ...initialMatch, ...parsed } : parsed;
         setCurrentUser(mergedUser);
@@ -214,90 +215,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (isDemoMode) {
       const prefix = `akra_${currentUser.id}_`;
-      const savedBooks = localStorage.getItem(`${prefix}books`);
-      const savedProgress = localStorage.getItem(`${prefix}progress`);
-      const savedPosts = localStorage.getItem(`${prefix}posts`);
-      const savedGoals = localStorage.getItem(`${prefix}goals`);
+      const savedBooks = safeStorageGet<Book[]>(`${prefix}books`, INITIAL_BOOKS);
+      setBooks(Array.isArray(savedBooks) ? savedBooks : INITIAL_BOOKS);
 
-      if (savedBooks) {
-        setBooks(JSON.parse(savedBooks));
-      } else {
-        setBooks(INITIAL_BOOKS);
-      }
+      const savedProgress = safeStorageGet<ReadingProgress[]>(
+        `${prefix}progress`,
+        INITIAL_PROGRESS(currentUser.id)
+      );
+      setReadingProgress(
+        Array.isArray(savedProgress)
+          ? savedProgress.filter((p) => !p.userId.startsWith('user_'))
+          : INITIAL_PROGRESS(currentUser.id)
+      );
 
-      if (savedProgress) {
-        const parsed = JSON.parse(savedProgress);
-        const filtered = parsed.filter((p: ReadingProgress) => !p.userId.startsWith('user_'));
-        setReadingProgress(filtered);
-      } else {
-        setReadingProgress(INITIAL_PROGRESS(currentUser.id));
-      }
+      const savedPosts = safeStorageGet<Post[]>(
+        `${prefix}posts`,
+        INITIAL_POSTS(currentUser.id, currentUser.displayName, currentUser.avatar)
+      );
+      setPosts(
+        Array.isArray(savedPosts)
+          ? savedPosts.filter(
+              (p) =>
+                !(
+                  p.userId.startsWith('user_') ||
+                  ['Rachel Amanda', 'Dimas Aditya', 'Aditya Wibowo', 'Siti Rahma', 'Budi Santoso'].includes(p.userDisplayName) ||
+                  p.content.includes("Kita tidak bisa mengendalikan hal eksternal") ||
+                  p.content.includes("fiksi bersama")
+                )
+            )
+          : INITIAL_POSTS(currentUser.id, currentUser.displayName, currentUser.avatar)
+      );
 
-      if (savedPosts) {
-        const parsed = JSON.parse(savedPosts);
-        const filtered = parsed.filter((p: Post) => {
-          return !(p.userId.startsWith('user_') || 
-                   ['Rachel Amanda', 'Dimas Aditya', 'Aditya Wibowo', 'Siti Rahma', 'Budi Santoso'].includes(p.userDisplayName) ||
-                   p.content.includes("Kita tidak bisa mengendalikan hal eksternal") ||
-                   p.content.includes("fiksi bersama"));
-        });
-        setPosts(filtered);
-      } else {
-        setPosts(INITIAL_POSTS(currentUser.id, currentUser.displayName, currentUser.avatar));
-      }
+      const savedGoals = safeStorageGet<ReadingGoal[]>(
+        `${prefix}goals`,
+        INITIAL_GOALS(currentUser.id)
+      );
+      setGoals(
+        Array.isArray(savedGoals)
+          ? savedGoals.filter((g) => !g.userId.startsWith('user_'))
+          : INITIAL_GOALS(currentUser.id)
+      );
 
-      if (savedGoals) {
-        const parsed = JSON.parse(savedGoals);
-        const filtered = parsed.filter((g: ReadingGoal) => !g.userId.startsWith('user_'));
-        setGoals(filtered);
-      } else {
-        setGoals(INITIAL_GOALS(currentUser.id));
-      }
+      const savedStories = safeStorageGet<Story[]>(
+        `${prefix}stories`,
+        INITIAL_STORIES(currentUser.id)
+      );
+      setStories(
+        Array.isArray(savedStories)
+          ? savedStories.filter((s) => !s.userId.startsWith('user_'))
+          : INITIAL_STORIES(currentUser.id)
+      );
 
-      const savedStories = localStorage.getItem(`${prefix}stories`);
-      const savedBookmarks = localStorage.getItem(`${prefix}saved_bookmarks`);
+      const savedBookmarks = safeStorageGet<string[]>(`${prefix}saved_bookmarks`, []);
+      setSavedPostIds(Array.isArray(savedBookmarks) ? savedBookmarks : []);
 
-      if (savedStories) {
-        const parsed = JSON.parse(savedStories);
-        const filtered = parsed.filter((s: Story) => !s.userId.startsWith('user_'));
-        setStories(filtered);
-      } else {
-        setStories(INITIAL_STORIES(currentUser.id));
-      }
+      const savedShelves = safeStorageGet<Shelf[]>(`${prefix}shelves`, []);
+      setShelves(Array.isArray(savedShelves) ? savedShelves : []);
 
-      if (savedBookmarks) {
-        setSavedPostIds(JSON.parse(savedBookmarks));
-      } else {
-        setSavedPostIds([]);
-      }
+      const savedBuddyReads = safeStorageGet<BuddyRead[]>(
+        `${prefix}buddy_reads`,
+        INITIAL_BUDDY_READS(currentUser.id)
+      );
+      setBuddyReads(Array.isArray(savedBuddyReads) ? savedBuddyReads : []);
 
-      const savedShelves = localStorage.getItem(`${prefix}shelves`);
-      if (savedShelves) {
-        setShelves(JSON.parse(savedShelves));
-      } else {
-        setShelves([]);
-      }
+      const savedBuddyMessages = safeStorageGet<BuddyMessage[]>(
+        `${prefix}buddy_messages`,
+        getInitialBuddyMessages(currentUser.id, currentUser.displayName, currentUser.avatar)
+      );
+      setBuddyMessages(Array.isArray(savedBuddyMessages) ? savedBuddyMessages : []);
 
-      const savedBuddyReads = localStorage.getItem(`${prefix}buddy_reads`);
-      if (savedBuddyReads) {
-        setBuddyReads(JSON.parse(savedBuddyReads));
-      } else {
-        setBuddyReads(INITIAL_BUDDY_READS(currentUser.id));
-      }
-
-      const savedBuddyMessages = localStorage.getItem(`${prefix}buddy_messages`);
-      if (savedBuddyMessages) {
-        setBuddyMessages(JSON.parse(savedBuddyMessages));
-      } else {
-        setBuddyMessages(getInitialBuddyMessages(currentUser.id, currentUser.displayName, currentUser.avatar));
-      }
-
-      const savedNotifications = localStorage.getItem(`${prefix}notifications`);
-      if (savedNotifications) {
-        setNotifications(JSON.parse(savedNotifications));
-      } else {
-        setNotifications(INITIAL_NOTIFICATIONS(currentUser.id));
-      }
+      const savedNotifications = safeStorageGet<Notification[]>(
+        `${prefix}notifications`,
+        INITIAL_NOTIFICATIONS(currentUser.id)
+      );
+      setNotifications(Array.isArray(savedNotifications) ? savedNotifications : []);
     }
   }, [currentUser, isLoaded]);
 
@@ -306,16 +297,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!isLoaded || currentUser.id === 'guest') return;
 
     const prefix = `akra_${currentUser.id}_`;
-    localStorage.setItem(`${prefix}books`, JSON.stringify(books));
-    localStorage.setItem(`${prefix}progress`, JSON.stringify(readingProgress));
-    localStorage.setItem(`${prefix}posts`, JSON.stringify(posts));
-    localStorage.setItem(`${prefix}goals`, JSON.stringify(goals));
-    localStorage.setItem(`${prefix}stories`, JSON.stringify(stories));
-    localStorage.setItem(`${prefix}saved_bookmarks`, JSON.stringify(savedPostIds));
-    localStorage.setItem(`${prefix}shelves`, JSON.stringify(shelves));
-    localStorage.setItem(`${prefix}buddy_reads`, JSON.stringify(buddyReads));
-    localStorage.setItem(`${prefix}buddy_messages`, JSON.stringify(buddyMessages));
-    localStorage.setItem(`${prefix}notifications`, JSON.stringify(notifications));
+    safeStorageSet(`${prefix}books`, books);
+    safeStorageSet(`${prefix}progress`, readingProgress);
+    safeStorageSet(`${prefix}posts`, posts);
+    safeStorageSet(`${prefix}goals`, goals);
+    safeStorageSet(`${prefix}stories`, stories);
+    safeStorageSet(`${prefix}saved_bookmarks`, savedPostIds);
+    safeStorageSet(`${prefix}shelves`, shelves);
+    safeStorageSet(`${prefix}buddy_reads`, buddyReads);
+    safeStorageSet(`${prefix}buddy_messages`, buddyMessages);
+    safeStorageSet(`${prefix}notifications`, notifications);
 
     if (!isDemoMode) {
       syncDataToFirestore();
@@ -399,27 +390,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {
       console.warn("Gagal sinkronisasi data masuk dari Firestore, beralih ke LocalStorage:", e);
       const prefix = `akra_${userId}_`;
-      const savedBooks = localStorage.getItem(`${prefix}books`);
-      const savedProgress = localStorage.getItem(`${prefix}progress`);
-      const savedPosts = localStorage.getItem(`${prefix}posts`);
-      const savedGoals = localStorage.getItem(`${prefix}goals`);
-      const savedStories = localStorage.getItem(`${prefix}stories`);
-      const savedBookmarks = localStorage.getItem(`${prefix}saved_bookmarks`);
-      const savedShelves = localStorage.getItem(`${prefix}shelves`);
-      const savedBuddyReads = localStorage.getItem(`${prefix}buddy_reads`);
-      const savedBuddyMessages = localStorage.getItem(`${prefix}buddy_messages`);
-      const savedNotifications = localStorage.getItem(`${prefix}notifications`);
-
-      if (savedBooks) setBooks(JSON.parse(savedBooks));
-      if (savedProgress) setReadingProgress(JSON.parse(savedProgress));
-      if (savedGoals) setGoals(JSON.parse(savedGoals));
-      if (savedPosts) setPosts(JSON.parse(savedPosts));
-      if (savedStories) setStories(JSON.parse(savedStories));
-      if (savedBookmarks) setSavedPostIds(JSON.parse(savedBookmarks));
-      if (savedShelves) setShelves(JSON.parse(savedShelves));
-      if (savedBuddyReads) setBuddyReads(JSON.parse(savedBuddyReads));
-      if (savedBuddyMessages) setBuddyMessages(JSON.parse(savedBuddyMessages));
-      if (savedNotifications) setNotifications(JSON.parse(savedNotifications));
+      setBooks(safeStorageGet<Book[]>(`${prefix}books`, []));
+      setReadingProgress(safeStorageGet<ReadingProgress[]>(`${prefix}progress`, []));
+      setGoals(safeStorageGet<ReadingGoal[]>(`${prefix}goals`, []));
+      setPosts(safeStorageGet<Post[]>(`${prefix}posts`, []));
+      setStories(safeStorageGet<Story[]>(`${prefix}stories`, []));
+      setSavedPostIds(safeStorageGet<string[]>(`${prefix}saved_bookmarks`, []));
+      setShelves(safeStorageGet<Shelf[]>(`${prefix}shelves`, []));
+      setBuddyReads(safeStorageGet<BuddyRead[]>(`${prefix}buddy_reads`, []));
+      setBuddyMessages(safeStorageGet<BuddyMessage[]>(`${prefix}buddy_messages`, []));
+      setNotifications(safeStorageGet<Notification[]>(`${prefix}notifications`, []));
     }
   };
 
@@ -462,7 +442,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       setCurrentUser(loggedUser);
       setIsLoggedIn(true);
-      localStorage.setItem('akra_current_user', JSON.stringify(loggedUser));
+      safeStorageSet('akra_current_user', loggedUser);
     } else {
       if (!auth) {
         throw new Error(firebaseConfigError || 'Firebase Auth belum dikonfigurasi.');
@@ -480,7 +460,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (isDemoMode) {
       setCurrentUser(GUEST_USER);
       setIsLoggedIn(false);
-      localStorage.removeItem('akra_current_user');
+      safeStorageRemove('akra_current_user');
       setViewedUser(null);
       setReadingProgress([]);
       setPosts([]);
@@ -777,7 +757,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setCurrentUser(updatedCurrentUser);
     if (isDemoMode) {
-      localStorage.setItem('akra_current_user', JSON.stringify(updatedCurrentUser));
+      safeStorageSet('akra_current_user', updatedCurrentUser);
     }
 
     // Update target user in users list
@@ -806,7 +786,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentUser(updatedUser);
 
     if (isDemoMode) {
-      localStorage.setItem('akra_current_user', JSON.stringify(updatedUser));
+      safeStorageSet('akra_current_user', updatedUser);
     } else {
       try {
         await setDoc(doc(db, 'users', currentUser.id), cleanUndefined(updatedUser));
