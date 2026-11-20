@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { BookOpen } from 'lucide-react';
 import { AnimatedBook } from './AnimatedBook';
+import { isDemoMode, firebaseConfigError } from '../lib/firebase';
 
 export const Login: React.FC = () => {
   const { loginWithGoogle } = useApp();
@@ -84,7 +85,11 @@ export const Login: React.FC = () => {
           </div>
 
           <div className="mt-6 text-[10px] text-text-slate-light font-medium tracking-wide">
-            Aman & Instan • Mode Demo Aktif Otomatis
+            {isDemoMode
+              ? 'Aman & Instan • Mode Demo Lokal Aktif'
+              : firebaseConfigError
+                ? firebaseConfigError
+                : 'Aman & Instan • Terhubung ke Firebase Auth'}
           </div>
 
         </div>

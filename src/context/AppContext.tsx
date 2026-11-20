@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { User, Book, ReadingProgress, Post, ReadingGoal, Comment, Story, Shelf, BuddyRead, BuddyMessage, Notification } from '../types';
-import { auth, db, isDemoMode, simulateGoogleSignIn, signInWithGoogleReal } from '../lib/firebase';
+import { auth, db, isDemoMode, firebaseConfigError, simulateGoogleSignIn, signInWithGoogleReal } from '../lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, doc, setDoc, getDoc, getDocs, query, where, limit, deleteDoc } from 'firebase/firestore';
 import { canDeletePost, filterOwnedRecordsForSync, FIRESTORE_QUERY_LIMITS } from '../lib/firestoreSync';
@@ -173,6 +173,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCurrentUser(mergedUser);
         setIsLoggedIn(true);
       }
+      setIsLoaded(true);
+      return;
+    }
+
+    if (!auth) {
       setIsLoaded(true);
       return;
     }
@@ -419,7 +424,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Sync to Firestore (only current user's owned documents)
   const syncDataToFirestore = async () => {
-    if (isDemoMode || currentUser.id === 'guest') return;
+    if (isDemoMode || !db || currentUser.id === 'guest') return;
     try {
       const owned = filterOwnedRecordsForSync(currentUser.id, {
         readingProgress,
@@ -458,10 +463,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsLoggedIn(true);
       localStorage.setItem('akra_current_user', JSON.stringify(loggedUser));
     } else {
+      if (!auth) {
+        throw new Error(firebaseConfigError || 'Firebase Auth belum dikonfigurasi.');
+      }
       try {
         await signInWithGoogleReal();
       } catch (err) {
         console.error("Gagal Login Google riil:", err);
+        throw err;
       }
     }
   };
@@ -475,7 +484,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setReadingProgress([]);
       setPosts([]);
       setGoals([]);
-    } else {
+    } else if (auth) {
       try {
         await signOut(auth);
       } catch (err) {
@@ -593,7 +602,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!canDeletePost(targetPost, currentUser.id)) return;
 
     setPosts((prev) => prev.filter((p) => p.id !== postId));
-    if (!isDemoMode && currentUser.id !== 'guest') {
+    if (!isDemoMode && currentUser.id !== 'guest' && db) {
       try {
         await deleteDoc(doc(db, 'posts', postId));
       } catch (e) {

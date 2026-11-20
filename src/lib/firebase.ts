@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, User as FirebaseUser } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { resolveFirebaseMode } from './firebaseConfig';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -11,32 +12,36 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Check if actual configuration keys exist
-const hasFirebaseConfig = 
-  !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY && 
-  process.env.NEXT_PUBLIC_FIREBASE_API_KEY !== "undefined" &&
-  !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith("MASUKKAN_") &&
-  !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith("YOUR_");
+const mode = resolveFirebaseMode({
+  NODE_ENV: process.env.NODE_ENV,
+  NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  NEXT_PUBLIC_ENABLE_DEMO_MODE: process.env.NEXT_PUBLIC_ENABLE_DEMO_MODE,
+});
 
 let app;
 let auth: any = null;
 let db: any = null;
 let googleProvider: any = null;
-let isDemoMode = true;
+let isDemoMode = mode.isDemoMode;
+let firebaseConfigError: string | null = mode.configError;
 
-if (hasFirebaseConfig) {
+if (mode.hasFirebaseConfig) {
   try {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     auth = getAuth(app);
     db = getFirestore(app);
     googleProvider = new GoogleAuthProvider();
     isDemoMode = false;
+    firebaseConfigError = null;
   } catch (error) {
-    console.error("Gagal menginisialisasi Firebase SDK asli, beralih ke Mode Demo:", error);
-    isDemoMode = true;
+    console.error("Gagal menginisialisasi Firebase SDK asli:", error);
+    isDemoMode = false;
+    firebaseConfigError = 'Firebase SDK initialization failed.';
   }
-} else {
-  console.log("Firebase API Key tidak ditemukan. AKRA berjalan dalam Mode Demo dengan simulasi Google Login.");
+} else if (isDemoMode) {
+  console.log("AKRA berjalan dalam Mode Demo lokal (NEXT_PUBLIC_ENABLE_DEMO_MODE=true).");
+} else if (firebaseConfigError) {
+  console.warn(firebaseConfigError);
 }
 
 // Interface for Mock User
@@ -76,10 +81,10 @@ export const simulateGoogleSignIn = (): Promise<MockGoogleUser> => {
 // Fungsi Login Riil dengan Google
 export const signInWithGoogleReal = async () => {
   if (!auth || !googleProvider) {
-    throw new Error("Firebase Auth belum diinisialisasi.");
+    throw new Error(firebaseConfigError || "Firebase Auth belum diinisialisasi.");
   }
   const result = await signInWithPopup(auth, googleProvider);
   return result.user;
 };
 
-export { auth, db, isDemoMode };
+export { auth, db, isDemoMode, firebaseConfigError };
