@@ -434,7 +434,26 @@ export const Feed: React.FC = () => {
         </div>
 
         {/* Feed Posts */}
-        {filteredFeedPosts.map((post) => {
+        {filteredFeedPosts.length === 0 ? (
+          <Card hoverable={false} className="p-8 text-center flex flex-col items-center gap-2">
+            <BookOpen size={28} className="text-brand-orange/70" />
+            <h4 className="text-sm font-bold text-text-slate-dark">
+              {language === 'id' ? 'Belum ada aktivitas di beranda' : 'No activity in your feed yet'}
+            </h4>
+            <p className="text-xs text-text-slate-medium max-w-sm">
+              {language === 'id'
+                ? 'Bagikan kutipan atau tambahkan buku ke perpustakaan Anda untuk memulai.'
+                : 'Share a quote or add a book to your library to get started.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => setCurrentTab('books')}
+              className="btn-primary text-xs mt-2"
+            >
+              {translations[language].addBook}
+            </button>
+          </Card>
+        ) : filteredFeedPosts.map((post) => {
           const isLiked = post.likes.includes(currentUser.id);
           const postBook = books.find((b) => b.id === post.bookId);
           

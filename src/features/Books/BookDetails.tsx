@@ -319,20 +319,21 @@ export const BookDetails: React.FC = () => {
   };
 
   const handleShare = async () => {
+    const shareUrl = `${window.location.origin}/?book=${encodeURIComponent(selectedBook.id)}&title=${encodeURIComponent(richDetail.title)}&author=${encodeURIComponent(richDetail.author)}`;
     if (navigator.share) {
       try {
         await navigator.share({
           title: richDetail.title,
           text: `Lihat buku "${richDetail.title}" oleh ${richDetail.author} di AKRA Apps!`,
-          url: window.location.href,
+          url: shareUrl,
         });
       } catch (err) {
         console.warn('Share cancelled or failed:', err);
       }
     } else if (navigator.clipboard?.writeText) {
       try {
-        await navigator.clipboard.writeText(window.location.href);
-        showToast(language === 'id' ? 'Tautan halaman disalin ke papan klip!' : 'Page link copied to clipboard!', 'success');
+        await navigator.clipboard.writeText(shareUrl);
+        showToast(language === 'id' ? 'Tautan buku disalin ke papan klip!' : 'Book link copied to clipboard!', 'success');
       } catch (err) {
         console.warn('Clipboard write failed:', err);
         showToast(language === 'id' ? 'Gagal menyalin tautan.' : 'Failed to copy link.', 'error');

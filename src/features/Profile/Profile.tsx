@@ -628,21 +628,29 @@ export const Profile: React.FC = () => {
                               ))}
                             </div>
                           </button>
-                          {isExpanded && shelfBooks.length > 0 && (
-                            <div className="p-3 pt-0 border-t border-border-light-gray/60 grid grid-cols-5 sm:grid-cols-6 gap-2 animate-slide-in">
-                              {shelfBooks.map(book => (
-                                <button
-                                  key={book.id}
-                                  type="button"
-                                  onClick={() => viewBookDetails(book)}
-                                  aria-label={book.title}
-                                  className="p-0 border-none bg-transparent cursor-pointer rounded-md overflow-hidden"
-                                >
-                                  <img src={book.coverImage} alt={book.title}
-                                    className="w-full aspect-[2/3] object-cover rounded-md border border-border-light-gray hover:scale-102 transition-transform" />
-                                </button>
-                              ))}
-                            </div>
+                          {isExpanded && (
+                            shelfBooks.length === 0 ? (
+                              <div className="p-4 border-t border-border-light-gray/60 text-center text-xs text-text-slate-medium">
+                                {language === 'id'
+                                  ? 'Rak ini masih kosong. Tambahkan buku lewat Perbarui Progres.'
+                                  : 'This shelf is empty. Add books via Update Progress.'}
+                              </div>
+                            ) : (
+                              <div className="p-3 pt-0 border-t border-border-light-gray/60 grid grid-cols-5 sm:grid-cols-6 gap-2 animate-slide-in">
+                                {shelfBooks.map(book => (
+                                  <button
+                                    key={book.id}
+                                    type="button"
+                                    onClick={() => viewBookDetails(book)}
+                                    aria-label={book.title}
+                                    className="p-0 border-none bg-transparent cursor-pointer rounded-md overflow-hidden"
+                                  >
+                                    <img src={book.coverImage} alt={book.title}
+                                      className="w-full aspect-[2/3] object-cover rounded-md border border-border-light-gray hover:scale-102 transition-transform" />
+                                  </button>
+                                ))}
+                              </div>
+                            )
                           )}
                         </div>
                       );

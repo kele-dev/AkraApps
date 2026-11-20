@@ -169,7 +169,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPreviousTab(currentTab === 'book-details' ? previousTab : currentTab);
     setSelectedBook(book);
     setCurrentTab('book-details');
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('book', book.id);
+      url.searchParams.set('title', book.title);
+      url.searchParams.set('author', book.author);
+      window.history.replaceState({}, '', url.toString());
+    }
   };
+
+  useEffect(() => {
+    if (!isLoaded || typeof window === 'undefined') return;
+    const searchParams = new URLSearchParams(window.location.search);
+    const sharedBookId = searchParams.get('book');
+    if (!sharedBookId) return;
+    const matched = books.find((b) => b.id === sharedBookId);
+    const sharedBook: Book = matched || {
+      id: sharedBookId,
+      title: searchParams.get('title') || 'Buku Pilihan',
+      author: searchParams.get('author') || 'Penulis',
+      coverImage: 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=300&q=80',
+      totalPages: 200,
+    };
+    setSelectedBook(sharedBook);
+    setCurrentTab('book-details');
+  }, [isLoaded]);
 
   // Core App states
   const [books, setBooks] = useState<Book[]>(INITIAL_BOOKS);
