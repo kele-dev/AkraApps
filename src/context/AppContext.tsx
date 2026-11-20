@@ -6,6 +6,7 @@ import { auth, db, isDemoMode, firebaseConfigError, simulateGoogleSignIn, signIn
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, doc, setDoc, getDoc, getDocs, query, where, limit, deleteDoc } from 'firebase/firestore';
 import { canDeletePost, filterOwnedRecordsForSync, FIRESTORE_QUERY_LIMITS } from '../lib/firestoreSync';
+import { computeProgressTransition } from '../lib/progressUtils';
 
 // Helper to recursively clean undefined values for Firestore
 const cleanUndefined = (obj: any): any => {
@@ -497,45 +498,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateProgress = (bookId: string, page: number, status: ReadingProgress['status'], rating?: number, note?: string) => {
     if (currentUser.id === 'guest') return;
 
-    let finalStatus = status;
-    let finalPage = page;
+    const { nextProgressList, finalPage, finalStatus, didNewlyComplete } =
+      computeProgressTransition({
+        prevProgress: readingProgress,
+        books,
+        userId: currentUser.id,
+        bookId,
+        page,
+        status,
+        rating,
+      });
 
-    setReadingProgress((prev) => {
-      const existingIdx = prev.findIndex((p) => p.userId === currentUser.id && p.bookId === bookId);
-      const book = books.find((b) => b.id === bookId);
-      const limitPage = book ? book.totalPages : page;
-      
-      finalStatus = status === 'COMPLETED' || page >= limitPage ? 'COMPLETED' : status;
-      finalPage = finalStatus === 'COMPLETED' ? limitPage : Math.max(0, Math.min(page, limitPage));
+    setReadingProgress(nextProgressList);
 
-      let newProgress = [...prev];
-      if (existingIdx > -1) {
-        newProgress[existingIdx] = {
-          ...newProgress[existingIdx],
-          currentPage: finalPage,
-          status: finalStatus,
-          rating: rating !== undefined ? rating : newProgress[existingIdx].rating,
-          updatedAt: new Date().toISOString(),
-        };
-      } else {
-        newProgress.push({
-          id: `p_${Date.now()}`,
-          userId: currentUser.id,
-          bookId,
-          currentPage: finalPage,
-          status: finalStatus,
-          rating,
-          updatedAt: new Date().toISOString(),
-        });
-      }
-
-      // If completed, update goals count
-      if (finalStatus === 'COMPLETED' && (existingIdx === -1 || prev[existingIdx].status !== 'COMPLETED')) {
-        updateGoalCompletedCount(1);
-      }
-
-      return newProgress;
-    });
+    if (didNewlyComplete) {
+      updateGoalCompletedCount(1);
+    }
 
     // Automatically create a post for progress update or completion
     const targetBook = books.find((b) => b.id === bookId);
