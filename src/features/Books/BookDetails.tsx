@@ -326,16 +326,24 @@ export const BookDetails: React.FC = () => {
     }, 450);
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
     if (navigator.share) {
-      navigator.share({
-        title: richDetail.title,
-        text: `Lihat buku "${richDetail.title}" oleh ${richDetail.author} di AKRA Apps!`,
-        url: window.location.href,
-      }).catch(err => console.log(err));
-    } else {
-      navigator.clipboard.writeText(window.location.href);
-      alert('Tautan halaman disalin ke papan klip!');
+      try {
+        await navigator.share({
+          title: richDetail.title,
+          text: `Lihat buku "${richDetail.title}" oleh ${richDetail.author} di AKRA Apps!`,
+          url: window.location.href,
+        });
+      } catch (err) {
+        console.warn('Share cancelled or failed:', err);
+      }
+    } else if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        alert('Tautan halaman disalin ke papan klip!');
+      } catch (err) {
+        console.warn('Clipboard write failed:', err);
+      }
     }
   };
 

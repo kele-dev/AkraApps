@@ -80,6 +80,8 @@ interface AppContextProps {
   isFollowing: (targetUserId: string) => boolean;
   language: 'id' | 'en';
   setLanguage: (lang: 'id' | 'en') => void;
+  actionError: string | null;
+  clearActionError: () => void;
 }
 
 const AppContext = createContext<AppContextProps | undefined>(undefined);
@@ -115,6 +117,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [language, setLanguageState] = useState<'id' | 'en'>('id');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const clearActionError = () => setActionError(null);
 
   // Load language preference on load
   useEffect(() => {
@@ -446,12 +450,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       safeStorageSet('akra_current_user', loggedUser);
     } else {
       if (!auth) {
-        throw new Error(firebaseConfigError || 'Firebase Auth belum dikonfigurasi.');
+        const msg = firebaseConfigError || 'Firebase Auth belum dikonfigurasi.';
+        setActionError(msg);
+        throw new Error(msg);
       }
       try {
+        setActionError(null);
         await signInWithGoogleReal();
       } catch (err) {
         console.error("Gagal Login Google riil:", err);
+        setActionError('Gagal masuk dengan Google. Silakan coba lagi.');
         throw err;
       }
     }
@@ -471,6 +479,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await signOut(auth);
       } catch (err) {
         console.error("Gagal Logout riil:", err);
+        setActionError('Gagal keluar dari akun. Silakan coba lagi.');
       }
     }
   };
@@ -567,6 +576,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await deleteDoc(doc(db, 'posts', postId));
       } catch (e) {
         console.error("Gagal menghapus postingan dari Firestore:", e);
+        setActionError('Gagal menghapus postingan dari server.');
       }
     }
   };
@@ -790,11 +800,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (isDemoMode) {
       safeStorageSet('akra_current_user', updatedUser);
-    } else {
+    } else if (db) {
       try {
         await setDoc(doc(db, 'users', currentUser.id), cleanUndefined(updatedUser));
       } catch (e) {
         console.error("Gagal menyimpan profil ke Firestore:", e);
+        setActionError('Gagal menyimpan perubahan profil ke server.');
       }
     }
 
@@ -877,6 +888,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isFollowing,
         language,
         setLanguage,
+        actionError,
+        clearActionError,
       }}
     >
       {children}

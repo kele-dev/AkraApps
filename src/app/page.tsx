@@ -12,7 +12,7 @@ import { BottomNav } from '../components/BottomNav';
 import { AnimatedBook } from '../components/AnimatedBook';
 
 export default function Home() {
-  const { currentTab, isLoggedIn, isLoaded } = useApp();
+  const { currentTab, isLoggedIn, isLoaded, actionError, clearActionError } = useApp();
 
   if (!isLoaded) {
     return (
@@ -33,6 +33,25 @@ export default function Home() {
     <div className="flex flex-col min-h-screen">
       {/* Top Navbar */}
       <Header />
+
+      {actionError && (
+        <div
+          role="alert"
+          className="w-full max-w-[1140px] mx-auto px-5 pt-4"
+        >
+          <div className="flex items-center justify-between gap-3 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold px-4 py-2.5 rounded-xl">
+            <span>{actionError}</span>
+            <button
+              type="button"
+              onClick={clearActionError}
+              aria-label="Tutup pesan kesalahan"
+              className="text-red-700 hover:text-red-900 bg-transparent border-none cursor-pointer font-bold"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 w-full max-w-[1140px] mx-auto px-5 pt-6 pb-24 md:py-8">
