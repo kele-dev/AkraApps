@@ -25,6 +25,7 @@ export const Header: React.FC = () => {
     setSelectedBookSuggestion,
     notifications,
     unreadNotificationCount,
+    markNotificationRead,
     markAllNotificationsRead,
     viewBookDetails,
     language,
@@ -405,10 +406,29 @@ export const Header: React.FC = () => {
                           const relativeTime = formatRelativeTime(notif.createdAt, language, new Date(), { compact: true });
 
                           return (
-                            <div
+                            <button
+                              type="button"
                               key={notif.id}
-                              className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${
-                                !notif.isRead ? 'bg-brand-orange/[0.04]' : ''
+                              onClick={() => {
+                                markNotificationRead(notif.id);
+                                setShowNotifications(false);
+                                const linkedPost = notif.postId
+                                  ? posts.find((p) => p.id === notif.postId)
+                                  : undefined;
+                                const targetBook =
+                                  (linkedPost?.bookId && books.find((b) => b.id === linkedPost.bookId)) ||
+                                  (notif.bookTitle &&
+                                    books.find(
+                                      (b) => b.title.toLowerCase() === notif.bookTitle?.toLowerCase()
+                                    ));
+                                if (targetBook) {
+                                  viewBookDetails(targetBook);
+                                } else {
+                                  setCurrentTab('feed');
+                                }
+                              }}
+                              className={`w-full text-left border-none flex items-start gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${
+                                !notif.isRead ? 'bg-brand-orange/[0.04]' : 'bg-transparent'
                               }`}
                             >
                               {/* Avatar */}
@@ -436,7 +456,7 @@ export const Header: React.FC = () => {
                               {!notif.isRead && (
                                 <div className="w-2 h-2 rounded-full bg-brand-orange shrink-0 mt-1" />
                               )}
-                            </div>
+                            </button>
                           );
                         })
                       )}

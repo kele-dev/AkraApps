@@ -9,6 +9,7 @@ import { canDeletePost, filterOwnedRecordsForSync, FIRESTORE_QUERY_LIMITS } from
 import { computeProgressTransition } from '../lib/progressUtils';
 import { safeStorageGet, safeStorageRemove, safeStorageSet } from '../lib/storage';
 import { clampGoalTarget, createUniqueId } from '../lib/idAndMath';
+import { createNotificationRecord } from '../lib/notificationUtils';
 import { logger } from '../lib/logger';
 
 // Helper to recursively clean undefined values for Firestore
@@ -82,6 +83,7 @@ interface AppContextProps {
   addBuddyMessage: (buddyReadId: string, content: string) => void;
   notifications: Notification[];
   unreadNotificationCount: number;
+  markNotificationRead: (notificationId: string) => void;
   markAllNotificationsRead: () => void;
   followUser: (targetUserId: string) => void;
   isFollowing: (targetUserId: string) => boolean;
@@ -361,7 +363,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       syncDataToFirestore();
     }, 400);
     return () => clearTimeout(timer);
-  }, [books, readingProgress, posts, goals, currentUser.id, isLoaded]);
+  }, [books, readingProgress, posts, goals, stories, shelves, buddyReads, buddyMessages, notifications, currentUser.id, isLoaded]);
 
   // Sync from Firestore
   const syncDataFromFirestore = async (userId: string, userObj: User) => {
@@ -391,13 +393,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         limit(FIRESTORE_QUERY_LIMITS.goals)
       );
       const postsQuery = query(collection(firestoreDb, 'posts'), limit(FIRESTORE_QUERY_LIMITS.posts));
+      const storiesQuery = query(collection(firestoreDb, 'stories'), limit(FIRESTORE_QUERY_LIMITS.stories));
+      const shelvesQuery = query(collection(firestoreDb, 'shelves'), limit(FIRESTORE_QUERY_LIMITS.shelves));
+      const buddyReadsQuery = query(
+        collection(firestoreDb, 'buddyReads'),
+        where('userIds', 'array-contains', userId),
+        limit(FIRESTORE_QUERY_LIMITS.buddyReads)
+      );
+      const buddyMessagesQuery = query(
+        collection(firestoreDb, 'buddyMessages'),
+        limit(FIRESTORE_QUERY_LIMITS.buddyMessages)
+      );
+      const notificationsQuery = query(
+        collection(firestoreDb, 'notifications'),
+        where('userId', '==', userId),
+        limit(FIRESTORE_QUERY_LIMITS.notifications)
+      );
 
-      const [booksSnap, usersSnap, progressSnap, goalsSnap, postsSnap] = await Promise.all([
+      const [
+        booksSnap,
+        usersSnap,
+        progressSnap,
+        goalsSnap,
+        postsSnap,
+        storiesSnap,
+        shelvesSnap,
+        buddyReadsSnap,
+        buddyMessagesSnap,
+        notificationsSnap,
+      ] = await Promise.all([
         getDocs(booksQuery),
         getDocs(usersQuery),
         getDocs(progressQuery),
         getDocs(goalsQuery),
         getDocs(postsQuery),
+        getDocs(storiesQuery),
+        getDocs(shelvesQuery),
+        getDocs(buddyReadsQuery),
+        getDocs(buddyMessagesQuery),
+        getDocs(notificationsQuery),
       ]);
 
       const booksList: Book[] = [];
@@ -429,6 +463,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         postsList.push(docSnap.data() as Post);
       });
       setPosts(postsList);
+
+      const storiesList: Story[] = [];
+      storiesSnap.forEach((docSnap) => {
+        storiesList.push(docSnap.data() as Story);
+      });
+      setStories(storiesList);
+
+      const shelvesList: Shelf[] = [];
+      shelvesSnap.forEach((docSnap) => {
+        shelvesList.push(docSnap.data() as Shelf);
+      });
+      setShelves(shelvesList);
+
+      const buddyReadsList: BuddyRead[] = [];
+      buddyReadsSnap.forEach((docSnap) => {
+        buddyReadsList.push(docSnap.data() as BuddyRead);
+      });
+      setBuddyReads(buddyReadsList);
+
+      const buddyMessagesList: BuddyMessage[] = [];
+      buddyMessagesSnap.forEach((docSnap) => {
+        buddyMessagesList.push(docSnap.data() as BuddyMessage);
+      });
+      setBuddyMessages(buddyMessagesList);
+
+      const notificationsList: Notification[] = [];
+      notificationsSnap.forEach((docSnap) => {
+        notificationsList.push(docSnap.data() as Notification);
+      });
+      setNotifications(notificationsList);
     } catch (e) {
       logger.warn('firestore.inbound_sync_fallback', { error: e });
       const prefix = `akra_${userId}_`;
@@ -454,6 +518,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         readingProgress,
         goals,
         posts,
+        stories,
+        shelves,
+        buddyReads,
+        buddyMessages,
+        notifications,
       });
 
       const ops: Array<{ ref: ReturnType<typeof doc>; data: Record<string, unknown> }> = [
@@ -461,6 +530,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...owned.readingProgress.map((p) => ({ ref: doc(firestoreDb, 'progress', p.id), data: toFirestoreData(p) })),
         ...owned.goals.map((g) => ({ ref: doc(firestoreDb, 'goals', `${g.userId}_${g.year}`), data: toFirestoreData(g) })),
         ...owned.posts.map((post) => ({ ref: doc(firestoreDb, 'posts', post.id), data: toFirestoreData(post) })),
+        ...owned.stories.map((story) => ({ ref: doc(firestoreDb, 'stories', story.id), data: toFirestoreData(story) })),
+        ...owned.shelves.map((shelf) => ({ ref: doc(firestoreDb, 'shelves', shelf.id), data: toFirestoreData(shelf) })),
+        ...owned.buddyReads.map((br) => ({ ref: doc(firestoreDb, 'buddyReads', br.id), data: toFirestoreData(br) })),
+        ...owned.buddyMessages.map((bm) => ({ ref: doc(firestoreDb, 'buddyMessages', bm.id), data: toFirestoreData(bm) })),
+        ...owned.notifications.map((notif) => ({ ref: doc(firestoreDb, 'notifications', notif.id), data: toFirestoreData(notif) })),
       ];
 
       const CHUNK_SIZE = 450;
@@ -526,6 +600,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const emitNotification = (
+    recipientUserId: string,
+    type: Notification['type'],
+    message: string,
+    extra: { postId?: string; bookTitle?: string } = {}
+  ) => {
+    const draft = createNotificationRecord({
+      recipientUserId,
+      actor: currentUser,
+      type,
+      message,
+      postId: extra.postId,
+      bookTitle: extra.bookTitle,
+      id: createUniqueId('notif'),
+    });
+    if (draft) {
+      setNotifications((prev) => [draft, ...prev]);
+    }
+  };
+
   // Actions
   const updateProgress = (bookId: string, page: number, status: ReadingProgress['status'], rating?: number, note?: string) => {
     if (currentUser.id === 'guest') return;
@@ -551,14 +645,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Automatically create a post for progress update or completion
     const targetBook = books.find((b) => b.id === bookId);
     if (targetBook) {
-      let displayStatus = finalStatus === 'COMPLETED' 
-        ? `Telah menyelesaikan membaca buku "${targetBook.title}"! 🎉` 
+      let displayStatus = finalStatus === 'COMPLETED'
+        ? `Telah menyelesaikan membaca buku "${targetBook.title}"! 🎉`
         : `Mencapai halaman ${finalPage} dari ${targetBook.totalPages} untuk buku "${targetBook.title}"`;
-      
+
       if (note && note.trim()) {
         displayStatus = `"${note.trim()}" — Catatan progres buku "${targetBook.title}" (Hal ${finalPage}/${targetBook.totalPages})`;
       }
-      
+
       addPost(
         'PROGRESS_UPDATE',
         displayStatus,
@@ -566,6 +660,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         finalPage,
         rating
       );
+
+      // Notify Buddy Read partners on reading progress / completion
+      for (const br of buddyReads) {
+        if (br.bookId === bookId && br.userIds.includes(currentUser.id)) {
+          for (const partnerId of br.userIds) {
+            if (partnerId !== currentUser.id) {
+              emitNotification(
+                partnerId,
+                finalStatus === 'COMPLETED' ? 'COMPLETED' : 'PROGRESS',
+                finalStatus === 'COMPLETED'
+                  ? `menyelesaikan "${targetBook.title}".`
+                  : `membaca hingga halaman ${finalPage} di "${targetBook.title}".`,
+                { bookTitle: targetBook.title }
+              );
+            }
+          }
+        }
+      }
     }
   };
 
@@ -626,6 +738,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const likePost = (postId: string) => {
     if (currentUser.id === 'guest') return;
 
+    const targetPost = posts.find((p) => p.id === postId);
+    const alreadyLiked = targetPost ? targetPost.likes.includes(currentUser.id) : false;
+
     setPosts((prev) =>
       prev.map((post) => {
         if (post.id === postId) {
@@ -638,12 +753,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return post;
       })
     );
+
+    if (targetPost && !alreadyLiked) {
+      emitNotification(
+        targetPost.userId,
+        'LIKE',
+        targetPost.bookTitle ? `menyukai postingan Anda tentang "${targetPost.bookTitle}".` : 'menyukai postingan Anda.',
+        { postId: targetPost.id, bookTitle: targetPost.bookTitle }
+      );
+    }
   };
 
   const addComment = (postId: string, commentContent: string) => {
     if (currentUser.id === 'guest') return;
     if (!commentContent.trim()) return;
 
+    const targetPost = posts.find((p) => p.id === postId);
     const newComment: Comment = {
       id: createUniqueId('comment'),
       userId: currentUser.id,
@@ -664,6 +789,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return post;
       })
     );
+
+    if (targetPost) {
+      emitNotification(
+        targetPost.userId,
+        'COMMENT',
+        targetPost.bookTitle ? `mengomentari postingan Anda di "${targetPost.bookTitle}".` : 'mengomentari postingan Anda.',
+        { postId: targetPost.id, bookTitle: targetPost.bookTitle }
+      );
+    }
   };
 
   const setGoal = (targetBooks: number) => {
@@ -776,6 +910,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setBuddyReads((prev) => [...prev, newBuddyRead]);
+
+    const buddyBook = books.find((b) => b.id === bookId);
+    emitNotification(
+      buddyUserId,
+      'BUDDY_READ',
+      buddyBook
+        ? `mengundang Anda membaca bersama "${buddyBook.title}".`
+        : 'mengundang Anda untuk sesi Buddy Read.',
+      { bookTitle: buddyBook?.title }
+    );
   };
 
   const addBuddyMessage = (buddyReadId: string, content: string) => {
@@ -792,6 +936,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setBuddyMessages((prev) => [...prev, newMessage]);
+  };
+
+  const markNotificationRead = (notificationId: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === notificationId ? { ...n, isRead: true } : n))
+    );
   };
 
   const markAllNotificationsRead = () => {
@@ -930,6 +1080,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addBuddyMessage,
       notifications,
       unreadNotificationCount,
+      markNotificationRead,
       markAllNotificationsRead,
       followUser,
       isFollowing,
