@@ -6,6 +6,8 @@ import { Card } from '../../components/Card';
 import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal';
 import { Modal } from '../../components/Modal';
 import { BookCover, UserAvatar } from '../../components/Media';
+import { FeedSidebarWidgets } from './FeedSidebarWidgets';
+import { StoryViewerModal } from './StoryViewerModal';
 import { formatRelativeTime } from '../../lib/dateUtils';
 import { MessageSquare, Bookmark, Quote, BookOpen, Send, Star, ChevronDown, Check, Image, X, Heart } from 'lucide-react';
 import { compressImageFileToDataUrl } from '../../lib/storage';
@@ -801,343 +803,39 @@ export const Feed: React.FC = () => {
       </div>
 
       {/* ================= RIGHT COLUMN: SIDEBAR WIDGETS ================= */}
-      <div className="flex flex-col gap-6">
-        
-        {/* WIDGET 1: CURRENTLY READING */}
-        <Card hoverable={false} className="p-4">
-          <h3 className="text-xs font-bold text-text-slate-dark mb-4 border-b border-border-light-gray pb-2">
-            {translations[language].currReadingWidget}
-          </h3>
-          
-          {currentlyReadingBooks.length === 0 ? (
-            <p className="text-xs text-text-slate-light my-3">
-              {translations[language].noActiveBooks}
-            </p>
-          ) : (
-            <div className="flex flex-col gap-4">
-              {currentlyReadingBooks.map((book) => {
-                const progress = currentlyReadingProgress.find((p) => p.bookId === book.id);
-                const currentPage = progress ? progress.currentPage : 0;
-                
-                return (
-                  <div key={book.id} className="flex gap-3 items-start">
-                    <button
-                      type="button"
-                      onClick={() => viewBookDetails(book)}
-                      aria-label={book.title}
-                      className="p-0 border-none bg-transparent cursor-pointer shrink-0 rounded-md"
-                    >
-                      <BookCover
-                        src={book.coverImage}
-                        alt={book.title}
-                        width={44}
-                        height={64}
-                        className="w-11 h-16 object-cover rounded-md border border-border-light-gray hover:opacity-85 transition-opacity"
-                      />
-                    </button>
-                    <div className="flex-1 min-w-0 flex flex-col gap-1">
-                      <h4 className="text-xs font-bold text-text-slate-dark truncate">
-                        <button
-                          type="button"
-                          onClick={() => viewBookDetails(book)}
-                          className="text-left bg-transparent border-none p-0 font-bold text-text-slate-dark truncate w-full cursor-pointer hover:text-brand-orange hover:underline"
-                        >
-                          {book.title}
-                        </button>
-                      </h4>
-                      <p className="text-[11px] text-text-slate-medium truncate">
-                        {language === 'id' ? 'oleh' : 'by'} {book.author}
-                      </p>
-                      
-                      {activeLogBookId === book.id ? (
-                        <div className="flex gap-1.5 items-center mt-1">
-                          <input
-                            type="number"
-                            aria-label={language === 'id' ? `Halaman saat ini untuk ${book.title}` : `Current page for ${book.title}`}
-                            value={logPage}
-                            onChange={(e) => setLogPage(parseInt(e.target.value) || 0)}
-                            className="w-11 text-xs p-1 border border-border-light-gray rounded-md bg-white text-center focus-visible:ring-2 focus-visible:ring-brand-orange/40"
-                          />
-                          <span className="text-[10px] text-text-slate-light">/ {book.totalPages}</span>
-                          <button 
-                            type="button"
-                            aria-label={language === 'id' ? 'Simpan progres' : 'Save progress'}
-                            onClick={() => handleQuickLogProgress(book.id)} 
-                            className="bg-brand-orange text-white border-none rounded-md p-1 cursor-pointer flex items-center"
-                          >
-                            <Check size={10} />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          className="btn-secondary self-start py-0.5 px-3 rounded-full text-[10px]"
-                          onClick={() => {
-                            setActiveLogBookId(book.id);
-                            setLogPage(currentPage);
-                          }}
-                        >
-                          {language === 'id' ? 'Perbarui Progres' : 'Update Progress'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="border-t border-border-light-gray mt-4 pt-2 flex gap-2 text-[10px] text-text-slate-medium">
-            <button type="button" onClick={() => setCurrentTab('books')} className="hover:underline cursor-pointer bg-transparent border-none p-0 text-[10px] text-text-slate-medium">{translations[language].viewAll}</button> • <button type="button" className="hover:underline cursor-pointer bg-transparent border-none p-0 text-[10px] text-text-slate-medium" onClick={() => setCurrentTab('books')}>{translations[language].addBook}</button>
-          </div>
-        </Card>        {/* WIDGET 2: RECOMMENDATION FROM BOOKMATES */}
-        <Card hoverable={false} className="p-4">
-          <h3 className="text-xs font-bold text-text-slate-dark mb-4 border-b border-border-light-gray pb-2">
-            {translations[language].recomBookmates}
-          </h3>
-
-          {(() => {
-            interface FriendRecommendation {
-              book: Book;
-              friend: User;
-              status: ReadingProgress['status'];
-              updatedAt: string;
-            }
-            const friendsProgress = readingProgress.filter((p) => p.userId !== currentUser.id && (p.status === 'READING' || p.status === 'COMPLETED'));
-            const friendRecommendations = friendsProgress.reduce<FriendRecommendation[]>((acc, progressItem) => {
-              const book = books.find((b) => b.id === progressItem.bookId);
-              const friend = users.find((u) => u.id === progressItem.userId);
-              if (book && friend && !acc.some(item => item.book.id === book.id)) {
-                acc.push({
-                  book,
-                  friend,
-                  status: progressItem.status,
-                  updatedAt: progressItem.updatedAt
-                });
-              }
-              return acc;
-            }, []).slice(0, 3);
-            if (friendRecommendations.length === 0) {
-              return (
-                <div className="text-center py-4 flex flex-col items-center justify-center">
-                  <div className="w-8 h-8 rounded-full bg-brand-orange-glow flex items-center justify-center text-brand-orange text-xs font-bold mb-2">
-                    👥
-                  </div>
-                  <p className="text-xs text-text-slate-dark font-bold">
-                    {translations[language].noRecommendations}
-                  </p>
-                  <p className="text-[10px] text-text-slate-medium text-center max-w-[180px] mt-1 leading-normal">
-                    {translations[language].inviteFriends}
-                  </p>
-                </div>
-              );
-            }
-
-            return (
-              <div className="flex flex-col gap-4">
-                {friendRecommendations.map((item) => (
-                  <div key={item.book.id} className="flex gap-3 items-start border-b border-border-light-gray/40 pb-3 last:border-b-0 last:pb-0">
-                    <button
-                      type="button"
-                      onClick={() => viewBookDetails(item.book)}
-                      aria-label={item.book.title}
-                      className="p-0 border-none bg-transparent cursor-pointer shrink-0 rounded-md"
-                    >
-                      <BookCover
-                        src={item.book.coverImage}
-                        alt={item.book.title}
-                        width={44}
-                        height={64}
-                        className="w-11 h-16 object-cover rounded-md border border-border-light-gray hover:opacity-85 transition-opacity shadow-xs"
-                      />
-                    </button>
-                    <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                      <h4 className="text-xs font-bold text-text-slate-dark truncate">
-                        <button
-                          type="button"
-                          onClick={() => viewBookDetails(item.book)}
-                          className="text-left bg-transparent border-none p-0 font-bold text-text-slate-dark truncate w-full cursor-pointer hover:text-brand-orange hover:underline"
-                        >
-                          {item.book.title}
-                        </button>
-                      </h4>
-                      <p className="text-[10px] text-text-slate-medium truncate mb-0.5">
-                        oleh {item.book.author}
-                      </p>
-                      
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <UserAvatar src={item.friend.avatar} alt="" width={14} height={14} className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
-                        <span className="text-[9px] font-bold text-text-slate-light leading-none">
-                          {item.status === 'COMPLETED' ? 'Selesai dibaca oleh ' : 'Sedang dibaca oleh '}
-                          <span className="text-text-slate-medium">{item.friend.displayName}</span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-        </Card>
-
-        {/* WIDGET 3: READING CHALLENGE */}
-        <Card hoverable={false} className="p-4">
-          <h3 className="text-xs font-bold text-text-slate-dark mb-4 border-b border-border-light-gray pb-2">
-            {language === 'id' ? 'Tantangan Membaca' : 'Reading Challenge'} {currentYear}
-          </h3>
-
-          <div className="flex gap-4 items-center">
-            {/* Custom SVG book stack illustration */}
-            <svg width="45" height="55" viewBox="0 0 60 70" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M5 60h45v8H5z" className="fill-brand-orange" />
-              <path d="M12 48h38v8H12z" className="fill-brand-orange-hover" />
-              <path d="M8 36h42v8H8z" fill="#403020" />
-              <path d="M15 24h35v8H15z" className="fill-brand-orange" />
-              <path d="M10 12h40v8H10z" className="fill-text-slate-light" />
-              <circle cx="35" cy="5" r="4" fill="#fbbf24" />
-            </svg>
-            
-            <div className="flex-1">
-              <div className="text-2xl font-extrabold text-text-slate-dark leading-none">
-                {userGoal.completedBooksCount}
-              </div>
-              <div className="text-[10px] text-text-slate-medium mb-2">
-                {language === 'id' ? 'buku selesai dibaca' : 'books completed'}
-              </div>
-
-              {/* Mini progress bar */}
-              <div className="h-1 bg-gray-200 rounded-full overflow-hidden mb-1">
-                <div 
-                  className="h-full bg-brand-orange" 
-                  style={{ 
-                    width: `${computePercent(userGoal.completedBooksCount, userGoal.targetBooks)}%` 
-                  }} 
-                />
-              </div>
-              <div className="flex justify-between text-[9px] text-text-slate-light">
-                <span>{userGoal.completedBooksCount} {language === 'id' ? 'dari' : 'of'} {userGoal.targetBooks}</span>
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setViewedUser(null);
-              setCurrentTab('profile');
-            }}
-            className="btn-secondary w-full justify-center py-1 px-3 rounded-full text-xs mt-4"
-          >
-            {language === 'id' ? 'Lihat Target' : 'View Target'}
-          </button>
-        </Card>
-
-      </div>
+      <FeedSidebarWidgets
+        language={language}
+        currentUser={currentUser}
+        users={users}
+        books={books}
+        readingProgress={readingProgress}
+        currentlyReadingBooks={currentlyReadingBooks}
+        currentlyReadingProgress={currentlyReadingProgress}
+        userGoal={userGoal}
+        currentYear={currentYear}
+        activeLogBookId={activeLogBookId}
+        logPage={logPage}
+        setActiveLogBookId={setActiveLogBookId}
+        setLogPage={setLogPage}
+        handleQuickLogProgress={handleQuickLogProgress}
+        viewBookDetails={viewBookDetails}
+        setCurrentTab={setCurrentTab}
+        setViewedUser={setViewedUser}
+      />
 
       {/* ================= STORY VIEWER OVERLAY ================= */}
-      <Modal
-        isOpen={Boolean(activeStoryUserId && activeUserStories.length > 0)}
+      <StoryViewerModal
+        activeStoryUserId={activeStoryUserId}
+        activeUserStories={activeUserStories}
+        activeStoryIndex={activeStoryIndex}
+        language={language}
         onClose={() => {
           setActiveStoryUserId(null);
           setActiveStoryIndex(0);
         }}
-        ariaLabel={language === 'id' ? 'Penampil cerita' : 'Story viewer'}
-        backdropClassName="bg-black/90"
-      >
-        {activeStoryUserId && activeUserStories.length > 0 && (
-          <div className="relative w-full max-w-[380px] h-[70vh] md:h-[75vh] rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-b from-[#3a2212] to-[#120a05] flex flex-col justify-between text-white p-5 animate-slide-in">
-            
-            {/* Top Row: Progress Indicators & Close Button */}
-            <div className="flex flex-col gap-3">
-              <div className="flex gap-1.5 w-full">
-                {activeUserStories.map((_, idx) => (
-                  <div key={idx} className="flex-1 h-1 bg-white/20 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full bg-white ${
-                        idx < activeStoryIndex 
-                          ? 'w-full' 
-                          : idx === activeStoryIndex 
-                            ? 'animate-story-progress' 
-                            : 'w-0'
-                      }`} 
-                    />
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex justify-between items-center px-1">
-                <div className="flex items-center gap-2.5">
-                  <UserAvatar
-                    src={activeUserStories[activeStoryIndex].userAvatar}
-                    alt={activeUserStories[activeStoryIndex].userDisplayName}
-                    width={32}
-                    height={32}
-                    className="w-8 h-8 rounded-full object-cover border border-white/25"
-                  />
-                  <div>
-                    <span className="text-xs font-bold block">{activeUserStories[activeStoryIndex].userDisplayName}</span>
-                    <span className="text-[9px] text-white/50 block">Baru saja</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  aria-label={language === 'id' ? 'Tutup cerita' : 'Close story'}
-                  onClick={() => {
-                    setActiveStoryUserId(null);
-                    setActiveStoryIndex(0);
-                  }}
-                  className="bg-transparent border-none text-white/70 hover:text-white cursor-pointer text-xl p-1 active-pop"
-                >
-                  &times;
-                </button>
-              </div>
-            </div>
-
-            {/* Middle: Content Graphic / Text Quote Box */}
-            <div className="flex-1 flex flex-col justify-center items-center px-4 py-8 text-center gap-6">
-              
-              {/* If Story is connected with a Book */}
-              {activeUserStories[activeStoryIndex].bookTitle && (
-                <div className="bg-white/10 backdrop-blur-md border border-white/15 p-2 px-3.5 rounded-full flex items-center gap-2 max-w-[280px] shadow-sm">
-                  <BookOpen size={14} className="text-brand-orange shrink-0" />
-                  <span className="text-[10px] text-white/90 text-left font-semibold truncate">
-                    Membaca: {activeUserStories[activeStoryIndex].bookTitle}
-                  </span>
-                </div>
-              )}
-
-              {/* Story Content Text */}
-              <p className="font-serif italic text-base leading-relaxed text-white/95 whitespace-pre-line px-2">
-                "{activeUserStories[activeStoryIndex].content}"
-              </p>
-
-            </div>
-
-            {/* Bottom: Navigation Buttons */}
-            <div className="flex justify-between items-center px-1 text-xs text-white/50 border-t border-white/10 pt-3">
-              <button
-                type="button"
-                disabled={activeStoryIndex === 0}
-                onClick={() => setActiveStoryIndex(prev => prev - 1)}
-                className="bg-white/10 hover:bg-white/20 text-white rounded px-3 py-1.5 border-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed active-pop"
-              >
-                Kembali
-              </button>
-              <span className="text-[10px] text-white/40 font-medium">
-                {activeStoryIndex + 1} dari {activeUserStories.length}
-              </span>
-              <button
-                type="button"
-                disabled={activeStoryIndex === activeUserStories.length - 1}
-                onClick={() => setActiveStoryIndex(prev => prev + 1)}
-                className="bg-white/10 hover:bg-white/20 text-white rounded px-3 py-1.5 border-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed active-pop"
-              >
-                Berikutnya
-              </button>
-            </div>
-
-          </div>
-        )}
-      </Modal>
+        onPrev={() => setActiveStoryIndex((prev) => prev - 1)}
+        onNext={() => setActiveStoryIndex((prev) => prev + 1)}
+      />
 
       {/* ================= STORY CREATOR MODAL ================= */}
       <Modal
