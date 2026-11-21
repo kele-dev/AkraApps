@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext';
 import { Bell, MessageSquare, Users, Search, LogOut, User } from 'lucide-react';
 import { LOCAL_BOOK_DATABASE } from '../features/Books/Books';
 import { AnimatedBook } from './AnimatedBook';
+import { BookCover, UserAvatar } from './Media';
 import { searchBooksHybrid, type SearchBookResult } from '../lib/bookApi';
 
 export const Header: React.FC = () => {
@@ -232,7 +233,7 @@ export const Header: React.FC = () => {
                       }}
                       className="w-full text-left bg-transparent border-none p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
                     >
-                      <img src={b.coverImage} alt={b.title} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
+                      <BookCover src={b.coverImage} alt={b.title} width={24} height={34} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-text-slate-dark truncate">{b.title}</p>
                         <p className="text-[10px] text-text-slate-medium truncate">{language === 'id' ? 'oleh' : 'by'} {b.author}</p>
@@ -259,7 +260,7 @@ export const Header: React.FC = () => {
                       }}
                       className="w-full text-left bg-transparent border-none p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
                     >
-                      <img src={b.coverImage} alt={b.title} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
+                      <BookCover src={b.coverImage} alt={b.title} width={24} height={34} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-text-slate-dark truncate">{b.title}</p>
                         <p className="text-[10px] text-text-slate-medium truncate">{language === 'id' ? 'oleh' : 'by'} {b.author}</p>
@@ -290,7 +291,7 @@ export const Header: React.FC = () => {
                       }}
                       className="w-full text-left bg-transparent border-none p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
                     >
-                      <img src={u.avatar} alt={u.displayName} className="w-6 h-6 rounded-full object-cover border border-border-light-gray shrink-0" />
+                      <UserAvatar src={u.avatar} alt={u.displayName} width={24} height={24} className="w-6 h-6 rounded-full object-cover border border-border-light-gray shrink-0" />
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-text-slate-dark truncate">{u.displayName}</p>
                         <p className="text-[10px] text-text-slate-light truncate">@{u.username}</p>
@@ -347,7 +348,7 @@ export const Header: React.FC = () => {
                         }}
                         className="w-full text-left bg-transparent border-none p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
                       >
-                        <img src={b.coverImage} alt={b.title} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
+                        <BookCover src={b.coverImage} alt={b.title} width={24} height={34} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
                         <div className="min-w-0 flex-1">
                           <p className="font-bold text-text-slate-dark truncate">{b.title}</p>
                           <p className="text-[10px] text-text-slate-medium truncate">{language === 'id' ? 'oleh' : 'by'} {b.author}</p>
@@ -460,9 +461,11 @@ export const Header: React.FC = () => {
                             >
                               {/* Avatar */}
                               <div className="relative shrink-0">
-                                <img
+                                <UserAvatar
                                   src={notif.fromUserAvatar}
                                   alt={notif.fromUserDisplayName}
+                                  width={32}
+                                  height={32}
                                   className="w-8 h-8 rounded-full object-cover border border-border-light-gray"
                                 />
                                 <span className="absolute -bottom-0.5 -right-0.5 text-[11px] bg-white rounded-full shadow-xs border border-white">{notifIcon}</span>
@@ -544,9 +547,12 @@ export const Header: React.FC = () => {
                   aria-expanded={showDropdown}
                   className="rounded-full p-0 border-none bg-transparent cursor-pointer flex items-center justify-center"
                 >
-                  <img
+                  <UserAvatar
                     src={currentUser.avatar}
                     alt={currentUser.displayName}
+                    width={32}
+                    height={32}
+                    priority
                     className="w-8 h-8 rounded-full object-cover border border-border-light-gray hover:border-brand-orange transition-all"
                   />
                 </button>

@@ -3,6 +3,7 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import { Home as HomeIcon, BookOpen } from 'lucide-react';
+import { UserAvatar } from './Media';
 
 export const BottomNav: React.FC = () => {
   const { currentTab, setCurrentTab, setViewedUser, currentUser, language } = useApp();
@@ -33,9 +34,11 @@ export const BottomNav: React.FC = () => {
             }`}
           >
             {tab.id === 'profile' ? (
-              <img
+              <UserAvatar
                 src={currentUser.avatar}
                 alt={currentUser.displayName}
+                width={24}
+                height={24}
                 className={`w-6 h-6 rounded-full object-cover border transition-all ${
                   isActive ? 'border-brand-orange ring-2 ring-brand-orange/15 scale-105' : 'border-border-light-gray hover:border-text-slate-light'
                 }`}

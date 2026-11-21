@@ -5,6 +5,7 @@ import { useApp, translations } from '../../context/AppContext';
 import { getRichBookDetail, RichBookDetail, RICH_BOOK_DATABASE } from './bookDetailsData';
 import { ArrowLeft, Star, Share2, ChevronDown, ChevronUp, Pen, Check } from 'lucide-react';
 import { ProgressBar } from '../../components/ProgressBar';
+import { BookCover, UserAvatar } from '../../components/Media';
 import { computePercent } from '../../lib/idAndMath';
 import { fetchWithTimeout } from '../../lib/http';
 import { resolveUserBookRating } from '../../lib/bookRating';
@@ -425,9 +426,12 @@ export const BookDetails: React.FC = () => {
         <div className="flex flex-col items-center md:items-start gap-5">
           {/* Book Cover */}
           <div className="relative group w-[180px] h-[260px] md:w-[200px] md:h-[290px] rounded-lg overflow-hidden shadow-md border border-border-light-gray shrink-0 bg-gray-50 transition-all duration-300 hover:shadow-lg hover-scale cursor-pointer">
-            <img
+            <BookCover
               src={richDetail.coverImage}
               alt={richDetail.title}
+              width={200}
+              height={290}
+              priority
               className="w-full h-full object-cover"
             />
           </div>
@@ -718,7 +722,7 @@ export const BookDetails: React.FC = () => {
                         .filter(u => appProgressesForThisBook.some(p => p.userId === u.id && p.status === 'READING'))
                         .slice(0, 3)
                         .map(u => (
-                          <img key={u.id} src={u.avatar} alt="" className="w-5 h-5 rounded-full object-cover border border-white" title={u.displayName} />
+                          <UserAvatar key={u.id} src={u.avatar} alt={u.displayName} width={20} height={20} className="w-5 h-5 rounded-full object-cover border border-white" title={u.displayName} />
                         ))}
                     </div>
                     <span className="text-text-slate-medium font-medium">
@@ -734,7 +738,7 @@ export const BookDetails: React.FC = () => {
                         .filter(u => appProgressesForThisBook.some(p => p.userId === u.id && p.status === 'WANT_TO_READ'))
                         .slice(0, 3)
                         .map(u => (
-                          <img key={u.id} src={u.avatar} alt="" className="w-5 h-5 rounded-full object-cover border border-white" title={u.displayName} />
+                          <UserAvatar key={u.id} src={u.avatar} alt={u.displayName} width={20} height={20} className="w-5 h-5 rounded-full object-cover border border-white" title={u.displayName} />
                         ))}
                     </div>
                     <span className="text-text-slate-medium font-medium">
@@ -750,7 +754,7 @@ export const BookDetails: React.FC = () => {
                         .filter(u => appProgressesForThisBook.some(p => p.userId === u.id && p.status === 'COMPLETED'))
                         .slice(0, 3)
                         .map(u => (
-                          <img key={u.id} src={u.avatar} alt="" className="w-5 h-5 rounded-full object-cover border border-white" title={u.displayName} />
+                          <UserAvatar key={u.id} src={u.avatar} alt={u.displayName} width={20} height={20} className="w-5 h-5 rounded-full object-cover border border-white" title={u.displayName} />
                         ))}
                     </div>
                     <span className="text-text-slate-medium font-medium">
@@ -770,9 +774,11 @@ export const BookDetails: React.FC = () => {
           <div className="border-t border-border-light-gray/60 pt-5 mt-2">
             <h3 className="font-serif text-lg font-bold text-[#181818] mb-4">{translations[language].aboutAuthor}</h3>
             <div className="flex items-start gap-4">
-              <img 
+              <UserAvatar 
                 src={richDetail.authorAvatar || "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&h=150&q=80"} 
                 alt={richDetail.author} 
+                width={56}
+                height={56}
                 className="w-14 h-14 rounded-full object-cover shrink-0 border border-border-light-gray" 
               />
               <div className="flex-1">
@@ -864,7 +870,7 @@ export const BookDetails: React.FC = () => {
                       <div className="flex flex-col gap-1.5">
                         <div className="flex justify-between text-xs font-bold text-text-slate-medium">
                           <span className="flex items-center gap-1.5">
-                            <img src={currentUser.avatar} alt="" className="w-4 h-4 rounded-full object-cover" />
+                            <UserAvatar src={currentUser.avatar} alt={currentUser.displayName} width={16} height={16} className="w-4 h-4 rounded-full object-cover" />
                             <span>Anda</span>
                           </span>
                           <span className="text-brand-orange">{myPage} / {selectedBook.totalPages} hal ({myPercent}%)</span>
@@ -878,7 +884,7 @@ export const BookDetails: React.FC = () => {
                       <div className="flex flex-col gap-1.5">
                         <div className="flex justify-between text-xs font-bold text-text-slate-medium">
                           <span className="flex items-center gap-1.5">
-                            <img src={buddyUser?.avatar} alt="" className="w-4 h-4 rounded-full object-cover" />
+                            <UserAvatar src={buddyUser?.avatar} alt={buddyUser?.displayName || 'Buddy'} width={16} height={16} className="w-4 h-4 rounded-full object-cover" />
                             <span>{buddyUser?.displayName}</span>
                           </span>
                           <span className="text-[#348055]">{buddyPage} / {selectedBook.totalPages} hal ({buddyPercent}%)</span>
@@ -907,7 +913,7 @@ export const BookDetails: React.FC = () => {
                           const isMe = msg.userId === currentUser.id;
                           return (
                             <div key={msg.id} className={`flex gap-2.5 items-start ${isMe ? 'flex-row-reverse' : ''}`}>
-                              <img src={msg.userAvatar} alt="" className="w-7 h-7 rounded-full object-cover shrink-0 border border-border-light-gray" />
+                              <UserAvatar src={msg.userAvatar} alt={msg.userDisplayName} width={28} height={28} className="w-7 h-7 rounded-full object-cover shrink-0 border border-border-light-gray" />
                               <div className={`flex flex-col max-w-[75%] ${isMe ? 'items-end' : ''}`}>
                                 <span className="text-[9px] font-bold text-text-slate-light mb-0.5">{msg.userDisplayName}</span>
                                 <div className={`p-2.5 rounded-2xl text-xs leading-relaxed ${
@@ -979,7 +985,7 @@ export const BookDetails: React.FC = () => {
                       }}
                       className="flex items-center gap-2 text-xs font-bold text-text-slate-dark border border-border-light-gray bg-white py-2 px-4 rounded-full shadow-2xs hover:shadow-xs hover:border-brand-orange/30 transition-all cursor-pointer active-pop hover-scale"
                     >
-                      <img src={u.avatar} alt="" className="w-5 h-5 rounded-full object-cover" />
+                      <UserAvatar src={u.avatar} alt={u.displayName} width={20} height={20} className="w-5 h-5 rounded-full object-cover" />
                       <span>Undang {u.displayName}</span>
                     </button>
                   ))}
@@ -1020,9 +1026,11 @@ export const BookDetails: React.FC = () => {
                   className="text-left bg-transparent border-none p-0 flex flex-col gap-2 min-w-[110px] max-w-[110px] shrink-0 snap-start cursor-pointer group"
                 >
                   <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden border border-border-light-gray shadow-2xs group-hover:shadow-sm transition-all bg-gray-50">
-                    <img
+                    <BookCover
                       src={book.coverImage}
                       alt={book.title}
+                      width={110}
+                      height={165}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                     {/* Rating badge */}

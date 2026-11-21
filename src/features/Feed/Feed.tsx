@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useApp, translations } from '../../context/AppContext';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import { BookCover, UserAvatar } from '../../components/Media';
 import { MessageSquare, Bookmark, Quote, BookOpen, Send, Star, ChevronDown, Check, Image, X, Heart } from 'lucide-react';
 import { compressImageFileToDataUrl } from '../../lib/storage';
 import { computePercent } from '../../lib/idAndMath';
@@ -214,9 +215,11 @@ export const Feed: React.FC = () => {
               aria-label={language === 'id' ? 'Buat cerita baru' : 'Create new story'}
               className="relative w-15 h-15 cursor-pointer active-pop hover-scale bg-transparent border-none p-0 rounded-full"
             >
-              <img
+              <UserAvatar
                 src={currentUser.avatar}
                 alt={currentUser.displayName}
+                width={60}
+                height={60}
                 className="w-full h-full rounded-full object-cover border-2 border-white ring-2 ring-gray-200"
               />
               <span className="absolute right-0 bottom-0 bg-brand-orange text-white w-5 h-5 rounded-full flex items-center justify-center font-bold text-sm border-2 border-white shadow-2xs" aria-hidden="true">
@@ -240,9 +243,11 @@ export const Feed: React.FC = () => {
                   aria-label={isOwn ? (language === 'id' ? 'Lihat cerita Anda' : 'View your story') : `${story.userDisplayName}`}
                   className="w-15 h-15 rounded-full p-[2.5px] cursor-pointer active-pop hover-scale border-none bg-gradient-to-tr from-brand-orange via-rose-500 to-amber-400"
                 >
-                  <img
+                  <UserAvatar
                     src={story.userAvatar}
                     alt={story.userDisplayName}
+                    width={60}
+                    height={60}
                     className="w-full h-full rounded-full object-cover border-2 border-white"
                   />
                 </button>
@@ -297,7 +302,7 @@ export const Feed: React.FC = () => {
               <div className="flex flex-col gap-3">
                 {photoPreview ? (
                   <div className="relative rounded-xl overflow-hidden border border-border-light-gray">
-                    <img src={photoPreview} alt="Preview" className="w-full max-h-72 object-cover" />
+                    <BookCover src={photoPreview} alt="Preview" width={600} height={320} className="w-full max-h-72 object-cover" />
                     <button
                       type="button"
                       aria-label={language === 'id' ? 'Hapus pratinjau foto' : 'Remove photo preview'}
@@ -469,9 +474,11 @@ export const Feed: React.FC = () => {
                   aria-label={post.userDisplayName}
                   className="p-0 border-none bg-transparent cursor-pointer rounded-full shrink-0"
                 >
-                  <img
+                  <UserAvatar
                     src={post.userAvatar}
                     alt={post.userDisplayName}
+                    width={36}
+                    height={36}
                     className="w-9 h-9 rounded-full object-cover hover:opacity-80 transition-opacity"
                   />
                 </button>
@@ -528,9 +535,11 @@ export const Feed: React.FC = () => {
                     aria-label={postBook.title}
                     className="p-0 border-none bg-transparent cursor-pointer shrink-0 rounded-md"
                   >
-                    <img
+                    <BookCover
                       src={postBook.coverImage}
                       alt={postBook.title}
+                      width={60}
+                      height={80}
                       className="w-15 h-20 object-cover rounded-md border border-border-light-gray hover:opacity-85 transition-opacity"
                     />
                   </button>
@@ -569,9 +578,11 @@ export const Feed: React.FC = () => {
               {/* PHOTO post */}
               {post.type === 'PHOTO' && post.imageUrl && (
                 <div className="flex flex-col gap-0 rounded-xl overflow-hidden border border-border-light-gray">
-                  <img
+                  <BookCover
                     src={post.imageUrl}
                     alt="Foto postingan"
+                    width={640}
+                    height={420}
                     className="w-full object-cover max-h-[420px]"
                   />
                   {post.content && (
@@ -731,9 +742,11 @@ export const Feed: React.FC = () => {
                       aria-label={comment.displayName}
                       className="p-0 border-none bg-transparent cursor-pointer rounded-full shrink-0"
                     >
-                      <img
+                      <UserAvatar
                         src={comment.avatar}
                         alt={comment.displayName}
+                        width={24}
+                        height={24}
                         className="w-6 h-6 rounded-full object-cover hover:opacity-80 transition-opacity"
                       />
                     </button>
@@ -757,9 +770,11 @@ export const Feed: React.FC = () => {
 
                 {/* Inline Comment Input Box */}
                 <div className="flex gap-2 items-center">
-                  <img
+                  <UserAvatar
                     src={currentUser.avatar}
                     alt={currentUser.displayName}
+                    width={24}
+                    height={24}
                     className="w-6 h-6 rounded-full object-cover"
                   />
                   <div className="flex-1 relative">
@@ -820,9 +835,11 @@ export const Feed: React.FC = () => {
                       aria-label={book.title}
                       className="p-0 border-none bg-transparent cursor-pointer shrink-0 rounded-md"
                     >
-                      <img
+                      <BookCover
                         src={book.coverImage}
                         alt={book.title}
+                        width={44}
+                        height={64}
                         className="w-11 h-16 object-cover rounded-md border border-border-light-gray hover:opacity-85 transition-opacity"
                       />
                     </button>
@@ -933,9 +950,11 @@ export const Feed: React.FC = () => {
                       aria-label={item.book.title}
                       className="p-0 border-none bg-transparent cursor-pointer shrink-0 rounded-md"
                     >
-                      <img
+                      <BookCover
                         src={item.book.coverImage}
                         alt={item.book.title}
+                        width={44}
+                        height={64}
                         className="w-11 h-16 object-cover rounded-md border border-border-light-gray hover:opacity-85 transition-opacity shadow-xs"
                       />
                     </button>
@@ -954,7 +973,7 @@ export const Feed: React.FC = () => {
                       </p>
                       
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <img src={item.friend.avatar} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
+                        <UserAvatar src={item.friend.avatar} alt="" width={14} height={14} className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
                         <span className="text-[9px] font-bold text-text-slate-light leading-none">
                           {item.status === 'COMPLETED' ? 'Selesai dibaca oleh ' : 'Sedang dibaca oleh '}
                           <span className="text-text-slate-medium">{item.friend.displayName}</span>
@@ -1055,9 +1074,11 @@ export const Feed: React.FC = () => {
 
               <div className="flex justify-between items-center px-1">
                 <div className="flex items-center gap-2.5">
-                  <img
+                  <UserAvatar
                     src={activeUserStories[activeStoryIndex].userAvatar}
                     alt={activeUserStories[activeStoryIndex].userDisplayName}
+                    width={32}
+                    height={32}
                     className="w-8 h-8 rounded-full object-cover border border-white/25"
                   />
                   <div>

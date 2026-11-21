@@ -5,6 +5,7 @@ import { useApp, translations } from '../../context/AppContext';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { ProgressBar } from '../../components/ProgressBar';
+import { BookCover, UserAvatar } from '../../components/Media';
 import { 
   BookOpen, CheckCircle, Flame, FileText, ArrowLeft, Trophy, Edit2, Check, 
   Award, Plus, FolderHeart, ChevronDown, ChevronRight, MoreVertical, Trash2,
@@ -266,9 +267,12 @@ export const Profile: React.FC = () => {
           <div className="flex items-end justify-between -mt-10 mb-3">
             {/* Avatar */}
             <div className="relative">
-              <img
+              <UserAvatar
                 src={targetUser.avatar}
                 alt={targetUser.displayName}
+                width={96}
+                height={96}
+                priority
                 className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-4 border-white shadow-md"
               />
               {isOwnProfile && (
@@ -479,7 +483,7 @@ export const Profile: React.FC = () => {
                           className="text-left bg-transparent border-none p-0 flex flex-col gap-2 w-full cursor-pointer"
                         >
                           <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden border border-border-light-gray shadow-2xs group-hover:shadow-xs transition-all">
-                            <img src={book.coverImage} alt={book.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            <BookCover src={book.coverImage} alt={book.title} width={140} height={210} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                             <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
                               <div className="h-full bg-brand-orange" style={{ width: `${percent}%` }} />
                             </div>
@@ -520,7 +524,7 @@ export const Profile: React.FC = () => {
                           aria-label={book.title}
                           className="w-full h-full p-0 border-none bg-transparent cursor-pointer block"
                         >
-                          <img src={book.coverImage} alt={book.title}
+                          <BookCover src={book.coverImage} alt={book.title} width={120} height={180}
                             className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-200" />
                         </button>
                         {isOwnProfile && (
@@ -567,7 +571,7 @@ export const Profile: React.FC = () => {
                           aria-label={book.title}
                           className="w-full h-full p-0 border-none bg-transparent cursor-pointer block"
                         >
-                          <img src={book.coverImage} alt={book.title}
+                          <BookCover src={book.coverImage} alt={book.title} width={120} height={180}
                             className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-200" />
                         </button>
                         <div className="absolute bottom-0 left-0 right-0 h-1 bg-brand-orange" />
@@ -624,7 +628,7 @@ export const Profile: React.FC = () => {
                             </div>
                             <div className="flex -space-x-2">
                               {shelfBooks.slice(0, 3).map(b => (
-                                <img key={b.id} src={b.coverImage} alt="" className="w-5 h-7 object-cover rounded-xs border border-white shadow-xs" />
+                                <BookCover key={b.id} src={b.coverImage} alt="" width={20} height={28} className="w-5 h-7 object-cover rounded-xs border border-white shadow-xs" />
                               ))}
                             </div>
                           </button>
@@ -645,7 +649,7 @@ export const Profile: React.FC = () => {
                                     aria-label={book.title}
                                     className="p-0 border-none bg-transparent cursor-pointer rounded-md overflow-hidden"
                                   >
-                                    <img src={book.coverImage} alt={book.title}
+                                    <BookCover src={book.coverImage} alt={book.title} width={100} height={150}
                                       className="w-full aspect-[2/3] object-cover rounded-md border border-border-light-gray hover:scale-102 transition-transform" />
                                   </button>
                                 ))}
@@ -996,7 +1000,7 @@ export const Profile: React.FC = () => {
                   aria-label="Ubah foto profil"
                   className="relative group cursor-pointer w-16 h-16 p-0 border-none bg-transparent rounded-full"
                 >
-                  <img src={editAvatar} alt="Preview" className="w-16 h-16 rounded-full object-cover border-2 border-brand-orange shadow-md group-hover:opacity-85 transition-opacity" />
+                  <UserAvatar src={editAvatar} alt="Preview" width={64} height={64} className="w-16 h-16 rounded-full object-cover border-2 border-brand-orange shadow-md group-hover:opacity-85 transition-opacity" />
                   <div className="absolute inset-0 bg-black/45 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <span className="text-white text-[9px] font-bold">Ubah</span>
                   </div>
@@ -1017,7 +1021,7 @@ export const Profile: React.FC = () => {
                         aria-label={`Pilih avatar preset ${idx + 1}`}
                         className="p-0 border-none bg-transparent rounded-full cursor-pointer"
                       >
-                        <img src={av} alt="" className={`w-6 h-6 rounded-full object-cover border transition-all ${editAvatar === av ? 'border-brand-orange ring-2 ring-brand-orange/20 scale-105' : 'border-border-light-gray'}`} />
+                        <UserAvatar src={av} alt="" width={24} height={24} className={`w-6 h-6 rounded-full object-cover border transition-all ${editAvatar === av ? 'border-brand-orange ring-2 ring-brand-orange/20 scale-105' : 'border-border-light-gray'}`} />
                       </button>
                     ))}
                   </div>
@@ -1089,7 +1093,7 @@ export const Profile: React.FC = () => {
 
               <div className="p-5 flex flex-col gap-4">
                 <div className="flex gap-3 items-center">
-                  <img src={activeProgressBook.coverImage} alt="" className="w-10 h-14 object-cover rounded-md border border-border-light-gray shrink-0 shadow-xs" />
+                  <BookCover src={activeProgressBook.coverImage} alt="" width={40} height={56} className="w-10 h-14 object-cover rounded-md border border-border-light-gray shrink-0 shadow-xs" />
                   <div className="min-w-0">
                     <h4 className="text-[11px] font-bold text-text-slate-dark truncate">{activeProgressBook.title}</h4>
                     <p className="text-[10px] text-text-slate-medium">{activeProgressBook.author}</p>

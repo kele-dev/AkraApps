@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp, translations } from '../../context/AppContext';
 import { Card } from '../../components/Card';
 import { ProgressBar } from '../../components/ProgressBar';
+import { BookCover } from '../../components/Media';
 import { Plus, CheckCircle, Clock, ListPlus } from 'lucide-react';
 import { searchBooksHybrid, type SearchBookResult } from '../../lib/bookApi';
 import type { Book } from '../../types';
@@ -364,9 +365,11 @@ export const Books: React.FC = () => {
                   aria-label={book.title}
                   className="p-0 border-none bg-transparent cursor-pointer shrink-0 rounded-md"
                 >
-                  <img
+                  <BookCover
                     src={book.coverImage}
                     alt={book.title}
+                    width={80}
+                    height={112}
                     className="w-20 h-28 object-cover rounded-md shadow-xs border border-border-light-gray hover:opacity-85 transition-opacity"
                   />
                 </button>

@@ -6,6 +6,7 @@ import { Search, Star, ChevronDown, Check, Users, BookOpen, Quote, HelpCircle } 
 import { LOCAL_BOOK_DATABASE } from '../Books/Books';
 import { Book } from '../../types';
 import { searchBooksHybrid, type SearchBookResult } from '../../lib/bookApi';
+import { BookCover, UserAvatar } from '../../components/Media';
 
 export const SearchPage: React.FC = () => {
   const { 
@@ -317,9 +318,11 @@ export const SearchPage: React.FC = () => {
                         aria-label={book.title}
                         className="p-0 border-none bg-transparent cursor-pointer shrink-0 rounded"
                       >
-                        <img
+                        <BookCover
                           src={book.coverImage}
                           alt={book.title}
+                          width={64}
+                          height={88}
                           className="w-16 h-22 object-cover rounded shadow-xs border border-border-light-gray bg-gray-50 hover:opacity-85 transition-opacity"
                         />
                       </button>
@@ -477,7 +480,7 @@ export const SearchPage: React.FC = () => {
               <div className="divide-y divide-border-light-gray flex flex-col">
                 {getFilteredPeople().map((user) => (
                   <div key={user.id} className="py-3 flex gap-3 items-center first:pt-0">
-                    <img src={user.avatar} alt={user.displayName} className="w-10 h-10 rounded-full object-cover border border-border-light-gray" />
+                    <UserAvatar src={user.avatar} alt={user.displayName} width={40} height={40} className="w-10 h-10 rounded-full object-cover border border-border-light-gray" />
                     <div className="flex-1 min-w-0">
                       <h4 className="text-xs font-bold text-text-slate-dark">{user.displayName}</h4>
                       <p className="text-[10px] text-text-slate-light">@{user.username}</p>
