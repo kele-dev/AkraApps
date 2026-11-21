@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Bell, MessageSquare, Users, Search, LogOut, User } from 'lucide-react';
-import { LOCAL_BOOK_DATABASE } from '../features/Books/Books';
 import { AnimatedBook } from './AnimatedBook';
 import { BookCover, UserAvatar } from './Media';
 import { searchBooksHybrid, type SearchBookResult } from '../lib/bookApi';
@@ -82,17 +81,13 @@ export const Header: React.FC = () => {
         });
         if (controller.signal.aborted) return;
         
-        // Filter out duplicates (already in books or LOCAL_BOOK_DATABASE)
+        // Filter out duplicates already in library books
         const filteredResults = results.filter((onlineBook) => {
           const inMyBooks = books.some(
-            (mb) => mb.title.toLowerCase() === onlineBook.title.toLowerCase() && 
+            (mb) => mb.title.toLowerCase() === onlineBook.title.toLowerCase() &&
                     mb.author.toLowerCase() === onlineBook.author.toLowerCase()
           );
-          const inDbBooks = LOCAL_BOOK_DATABASE.some(
-            (dbb) => dbb.title.toLowerCase() === onlineBook.title.toLowerCase() && 
-                     dbb.author.toLowerCase() === onlineBook.author.toLowerCase()
-          );
-          return !inMyBooks && !inDbBooks;
+          return !inMyBooks;
         });
 
         setOnlineSuggestions(filteredResults);
@@ -120,13 +115,6 @@ export const Header: React.FC = () => {
     ? books.filter(b => b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query))
     : [];
 
-  const matchingDbBooks = query
-    ? LOCAL_BOOK_DATABASE.filter(b => {
-        const alreadyInLibrary = books.some(myBook => myBook.title.toLowerCase() === b.title.toLowerCase() && myBook.author.toLowerCase() === b.author.toLowerCase());
-        return !alreadyInLibrary && (b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query));
-      })
-    : [];
-
   const matchingUsers = query
     ? users.filter(u => u.displayName.toLowerCase().includes(query) || u.username.toLowerCase().includes(query))
     : [];
@@ -135,7 +123,7 @@ export const Header: React.FC = () => {
     ? posts.filter(p => p.content.toLowerCase().includes(query) || (p.bookTitle && p.bookTitle.toLowerCase().includes(query)))
     : [];
 
-  const hasSuggestions = matchingMyBooks.length > 0 || matchingDbBooks.length > 0 || matchingUsers.length > 0 || matchingPosts.length > 0 || onlineSuggestions.length > 0;
+  const hasSuggestions = matchingMyBooks.length > 0 || matchingUsers.length > 0 || matchingPosts.length > 0 || onlineSuggestions.length > 0;
   const showSuggestionsDropdown = showSuggestions && query.length > 0;
 
   const navLinks = [
@@ -240,36 +228,6 @@ export const Header: React.FC = () => {
                         <p className="font-bold text-text-slate-dark truncate">{b.title}</p>
                         <p className="text-[10px] text-text-slate-medium truncate">{language === 'id' ? 'oleh' : 'by'} {b.author}</p>
                       </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Category: Buku Lain (Database) */}
-              {matchingDbBooks.length > 0 && (
-                <div className="p-2">
-                  <div className="text-[10px] font-extrabold text-brand-orange uppercase px-2 py-1 mb-1">
-                    {language === 'id' ? 'Buku Baru (Database)' : 'New Books (Database)'}
-                  </div>
-                  {matchingDbBooks.map(b => (
-                    <button
-                      type="button"
-                      key={b.id}
-                      onClick={() => {
-                        viewBookDetails(b);
-                        setLocalSearch('');
-                        setShowSuggestions(false);
-                      }}
-                      className="w-full text-left bg-transparent border-none p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
-                    >
-                      <BookCover src={b.coverImage} alt={b.title} width={24} height={34} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-text-slate-dark truncate">{b.title}</p>
-                        <p className="text-[10px] text-text-slate-medium truncate">{language === 'id' ? 'oleh' : 'by'} {b.author}</p>
-                      </div>
-                      <span className="text-[9px] text-brand-orange border border-brand-orange/30 bg-brand-orange-glow px-1.5 py-0.5 rounded-md font-bold shrink-0 transition-all hover:bg-brand-orange hover:text-white">
-                        {language === 'id' ? '+ Tambah' : '+ Add'}
-                      </span>
                     </button>
                   ))}
                 </div>

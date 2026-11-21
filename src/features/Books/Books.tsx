@@ -11,8 +11,6 @@ import { filterLocalBooks } from '../../lib/bookSearchUtils';
 import { logger } from '../../lib/logger';
 import type { Book } from '../../types';
 
-export const LOCAL_BOOK_DATABASE: Book[] = [];
-
 export const Books: React.FC = () => {
   const { 
     books, 
@@ -57,7 +55,7 @@ export const Books: React.FC = () => {
   const triggerLocalFallback = (warningMsg: string, queryToUse?: string) => {
     setSearchWarning(warningMsg);
     const q = typeof queryToUse === 'string' ? queryToUse : searchQuery;
-    setSearchResults(filterLocalBooks(LOCAL_BOOK_DATABASE, q));
+    setSearchResults(filterLocalBooks(books, q));
   };
 
   const handleApiSearch = async (overrideQuery?: string) => {

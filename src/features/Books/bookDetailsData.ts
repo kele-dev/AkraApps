@@ -20,43 +20,8 @@ export interface RichBookDetail {
   wantToReadCount?: number;
 }
 
-export const RICH_BOOK_DATABASE: Record<string, Omit<RichBookDetail, 'id' | 'title' | 'author'>> = {};
-
 export const getRichBookDetail = (book: { id: string; title: string; author: string; coverImage: string; totalPages: number; category?: string }): RichBookDetail => {
-  let key = `${book.title.toLowerCase().trim()}_${book.author.toLowerCase().trim()}`;
-
-  // Catch variants of Start with Why
-  if (key.includes("start with why") && key.includes("simon sinek")) {
-    key = "start with why_simon sinek";
-  }
-
-  const localDetail = RICH_BOOK_DATABASE[key];
-
-  if (localDetail) {
-    return {
-      id: book.id,
-      title: book.title,
-      author: book.author,
-      coverImage: (book.coverImage && !book.coverImage.includes('photo-1543002588')) ? book.coverImage : localDetail.coverImage,
-      totalPages: localDetail.totalPages,
-      category: book.category || localDetail.category,
-      rating: localDetail.rating,
-      ratingsCount: localDetail.ratingsCount,
-      reviewsCount: localDetail.reviewsCount,
-      description: localDetail.description,
-      genres: localDetail.genres,
-      publishedDate: localDetail.publishedDate,
-      binding: localDetail.binding,
-      tagline: localDetail.tagline,
-      authorAvatar: localDetail.authorAvatar,
-      authorBio: localDetail.authorBio,
-      authorStats: localDetail.authorStats,
-      currentlyReadingCount: localDetail.currentlyReadingCount,
-      wantToReadCount: localDetail.wantToReadCount
-    };
-  }
-
-  // Procedural generation for details not in local list
+  // Procedural generation for book details fallback
   const titleCharSum = book.title.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
   const authorCharSum = book.author.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
   const seed = titleCharSum + authorCharSum;

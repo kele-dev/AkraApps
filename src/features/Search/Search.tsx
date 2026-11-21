@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp, translations } from '../../context/AppContext';
 import { Search, Star, ChevronDown, Check, Users, BookOpen, Quote, HelpCircle } from 'lucide-react';
-import { LOCAL_BOOK_DATABASE } from '../Books/Books';
 import { Book } from '../../types';
 import { searchBooksHybrid, type SearchBookResult } from '../../lib/bookApi';
 import { filterLocalBooks } from '../../lib/bookSearchUtils';
@@ -97,8 +96,8 @@ export const SearchPage: React.FC = () => {
   };
 
   const triggerLocalFallback = (queryText: string, startTime: number, warningMsg = '') => {
-    setSearchWarning(warningMsg || "Buku tidak ditemukan. Menampilkan hasil database lokal.");
-    const filtered = filterLocalBooks(LOCAL_BOOK_DATABASE, queryText);
+    setSearchWarning(warningMsg || "Buku tidak ditemukan. Menampilkan hasil koleksi lokal.");
+    const filtered = filterLocalBooks(books, queryText);
     setSearchResults(filtered);
     setTotalResults(filtered.length);
     const endTime = performance.now();

@@ -105,24 +105,8 @@ const GUEST_USER: User = {
   bio: 'Silakan masuk dengan Google untuk menyimpan data membaca.'
 };
 
-// INITIAL MOCK DATA
-const INITIAL_USERS: User[] = [];
-const INITIAL_BOOKS: Book[] = [];
-const INITIAL_PROGRESS = (userId: string): ReadingProgress[] => [];
-const INITIAL_POSTS = (userId: string, userDisplayName: string, userAvatar: string): Post[] => [];
-const INITIAL_STORIES = (userId: string): Story[] => [];
-const INITIAL_GOALS = (userId: string): ReadingGoal[] => [];
-const INITIAL_BUDDY_READS = (userId: string): BuddyRead[] => [];
-const INITIAL_NOTIFICATIONS = (currentUserId: string): Notification[] => [];
-const getInitialBuddyMessages = (currentUserId: string, currentUserDisplayName: string, currentUserAvatar: string): BuddyMessage[] => [];
-
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Merge localStorage users with INITIAL_USERS to include new social fields
-  const mergedInitialUsers = INITIAL_USERS.map(initialUser => {
-    const parsed = safeStorageGet<Partial<User> | null>(`akra_user_${initialUser.id}`, null);
-    return parsed ? { ...initialUser, ...parsed } : initialUser;
-  });
-  const [users, setUsers] = useState<User[]>(mergedInitialUsers);
+  const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User>(GUEST_USER);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -203,7 +187,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [isLoaded]);
 
   // Core App states
-  const [books, setBooks] = useState<Book[]>(INITIAL_BOOKS);
+  const [books, setBooks] = useState<Book[]>([]);
   const [readingProgress, setReadingProgress] = useState<ReadingProgress[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [goals, setGoals] = useState<ReadingGoal[]>([]);
@@ -220,9 +204,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Load user session from LocalStorage safely
       const parsed = safeStorageGet<User | null>('akra_current_user', null);
       if (parsed && typeof parsed === 'object' && parsed.id) {
-        const initialMatch = INITIAL_USERS.find(u => u.id === parsed.id);
-        const mergedUser = initialMatch ? { ...initialMatch, ...parsed } : parsed;
-        setCurrentUser(mergedUser);
+        setCurrentUser(parsed);
         setIsLoggedIn(true);
       }
       setIsLoaded(true);
@@ -265,23 +247,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (isDemoMode) {
       const prefix = `akra_${currentUser.id}_`;
-      const savedBooks = safeStorageGet<Book[]>(`${prefix}books`, INITIAL_BOOKS);
-      setBooks(Array.isArray(savedBooks) ? savedBooks : INITIAL_BOOKS);
+      const savedBooks = safeStorageGet<Book[]>(`${prefix}books`, []);
+      setBooks(Array.isArray(savedBooks) ? savedBooks : []);
 
-      const savedProgress = safeStorageGet<ReadingProgress[]>(
-        `${prefix}progress`,
-        INITIAL_PROGRESS(currentUser.id)
-      );
+      const savedProgress = safeStorageGet<ReadingProgress[]>(`${prefix}progress`, []);
       setReadingProgress(
         Array.isArray(savedProgress)
           ? savedProgress.filter((p) => !p.userId.startsWith('user_'))
-          : INITIAL_PROGRESS(currentUser.id)
+          : []
       );
 
-      const savedPosts = safeStorageGet<Post[]>(
-        `${prefix}posts`,
-        INITIAL_POSTS(currentUser.id, currentUser.displayName, currentUser.avatar)
-      );
+      const savedPosts = safeStorageGet<Post[]>(`${prefix}posts`, []);
       setPosts(
         Array.isArray(savedPosts)
           ? savedPosts.filter(
@@ -293,27 +269,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   p.content.includes("fiksi bersama")
                 )
             )
-          : INITIAL_POSTS(currentUser.id, currentUser.displayName, currentUser.avatar)
+          : []
       );
 
-      const savedGoals = safeStorageGet<ReadingGoal[]>(
-        `${prefix}goals`,
-        INITIAL_GOALS(currentUser.id)
-      );
+      const savedGoals = safeStorageGet<ReadingGoal[]>(`${prefix}goals`, []);
       setGoals(
         Array.isArray(savedGoals)
           ? savedGoals.filter((g) => !g.userId.startsWith('user_'))
-          : INITIAL_GOALS(currentUser.id)
+          : []
       );
 
-      const savedStories = safeStorageGet<Story[]>(
-        `${prefix}stories`,
-        INITIAL_STORIES(currentUser.id)
-      );
+      const savedStories = safeStorageGet<Story[]>(`${prefix}stories`, []);
       setStories(
         Array.isArray(savedStories)
           ? savedStories.filter((s) => !s.userId.startsWith('user_'))
-          : INITIAL_STORIES(currentUser.id)
+          : []
       );
 
       const savedBookmarks = safeStorageGet<string[]>(`${prefix}saved_bookmarks`, []);
@@ -322,22 +292,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const savedShelves = safeStorageGet<Shelf[]>(`${prefix}shelves`, []);
       setShelves(Array.isArray(savedShelves) ? savedShelves : []);
 
-      const savedBuddyReads = safeStorageGet<BuddyRead[]>(
-        `${prefix}buddy_reads`,
-        INITIAL_BUDDY_READS(currentUser.id)
-      );
+      const savedBuddyReads = safeStorageGet<BuddyRead[]>(`${prefix}buddy_reads`, []);
       setBuddyReads(Array.isArray(savedBuddyReads) ? savedBuddyReads : []);
 
-      const savedBuddyMessages = safeStorageGet<BuddyMessage[]>(
-        `${prefix}buddy_messages`,
-        getInitialBuddyMessages(currentUser.id, currentUser.displayName, currentUser.avatar)
-      );
+      const savedBuddyMessages = safeStorageGet<BuddyMessage[]>(`${prefix}buddy_messages`, []);
       setBuddyMessages(Array.isArray(savedBuddyMessages) ? savedBuddyMessages : []);
 
-      const savedNotifications = safeStorageGet<Notification[]>(
-        `${prefix}notifications`,
-        INITIAL_NOTIFICATIONS(currentUser.id)
-      );
+      const savedNotifications = safeStorageGet<Notification[]>(`${prefix}notifications`, []);
       setNotifications(Array.isArray(savedNotifications) ? savedNotifications : []);
     }
   }, [currentUser, isLoaded]);
@@ -443,38 +404,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       booksSnap.forEach((docSnap) => {
         booksList.push(docSnap.data() as Book);
       });
-      setBooks(booksList.length > 0 ? booksList : INITIAL_BOOKS);
+      setBooks(booksList);
 
       const usersList: User[] = [];
       usersSnap.forEach((docSnap) => {
         usersList.push(docSnap.data() as User);
       });
-      const existingUserIds = new Set(usersList.map(u => u.id));
-      const mergedUsers = [...usersList];
-      for (const u of INITIAL_USERS) {
-        if (!existingUserIds.has(u.id)) {
-          mergedUsers.push(u);
-        }
-      }
-      setUsers(mergedUsers);
+      setUsers(usersList);
 
       const progressList: ReadingProgress[] = [];
       progressSnap.forEach((docSnap) => {
         progressList.push(docSnap.data() as ReadingProgress);
       });
-      setReadingProgress(progressList.length > 0 ? progressList : INITIAL_PROGRESS(userId));
+      setReadingProgress(progressList);
 
       const goalsList: ReadingGoal[] = [];
       goalsSnap.forEach((docSnap) => {
         goalsList.push(docSnap.data() as ReadingGoal);
       });
-      setGoals(goalsList.length > 0 ? goalsList : INITIAL_GOALS(userId));
+      setGoals(goalsList);
 
       const postsList: Post[] = [];
       postsSnap.forEach((docSnap) => {
         postsList.push(docSnap.data() as Post);
       });
-      setPosts(postsList.length > 0 ? postsList : INITIAL_POSTS(userId, finalUser.displayName, finalUser.avatar));
+      setPosts(postsList);
     } catch (e) {
       logger.warn('firestore.inbound_sync_fallback', { error: e });
       const prefix = `akra_${userId}_`;

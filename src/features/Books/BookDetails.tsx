@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp, translations } from '../../context/AppContext';
-import { getRichBookDetail, RichBookDetail, RICH_BOOK_DATABASE } from './bookDetailsData';
+import { getRichBookDetail, RichBookDetail } from './bookDetailsData';
 import { ArrowLeft, Star, Share2, ChevronDown, ChevronUp, Pen, Check } from 'lucide-react';
 import { ProgressBar } from '../../components/ProgressBar';
 import { BookCover, UserAvatar } from '../../components/Media';
