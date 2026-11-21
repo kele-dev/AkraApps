@@ -1,15 +1,17 @@
 "use client";
 
+import dynamic from 'next/dynamic';
 import { useApp } from '../context/AppContext';
 import { Header } from '../components/Header';
-import { Feed } from '../features/Feed/Feed';
-import { Books } from '../features/Books/Books';
-import { Profile } from '../features/Profile/Profile';
-import { SearchPage } from '../features/Search/Search';
-import { BookDetails } from '../features/Books/BookDetails';
 import { Login } from '../components/Login';
 import { BottomNav } from '../components/BottomNav';
 import { AnimatedBook } from '../components/AnimatedBook';
+
+const Feed = dynamic(() => import('../features/Feed/Feed').then((m) => m.Feed));
+const Books = dynamic(() => import('../features/Books/Books').then((m) => m.Books));
+const Profile = dynamic(() => import('../features/Profile/Profile').then((m) => m.Profile));
+const SearchPage = dynamic(() => import('../features/Search/Search').then((m) => m.SearchPage));
+const BookDetails = dynamic(() => import('../features/Books/BookDetails').then((m) => m.BookDetails));
 
 export default function Home() {
   const { currentTab, isLoggedIn, isLoaded, actionError, clearActionError, toast, clearToast } = useApp();
