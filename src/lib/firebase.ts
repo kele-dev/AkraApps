@@ -1,6 +1,8 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, User as FirebaseUser } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider, signInWithPopup, type Auth } from 'firebase/auth';
+import { getFirestore, type Firestore } from 'firebase/firestore';
+import { resolveFirebaseMode } from './firebaseConfig';
+import { logger } from './logger';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -11,32 +13,45 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Check if actual configuration keys exist
-const hasFirebaseConfig = 
-  !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY && 
-  process.env.NEXT_PUBLIC_FIREBASE_API_KEY !== "undefined" &&
-  !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith("MASUKKAN_") &&
-  !process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith("YOUR_");
+const mode = resolveFirebaseMode({
+  NODE_ENV: process.env.NODE_ENV,
+  NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  NEXT_PUBLIC_ENABLE_DEMO_MODE: process.env.NEXT_PUBLIC_ENABLE_DEMO_MODE,
+});
+
+if (mode.hasFirebaseConfig && mode.missingKeys.length > 0) {
+  logger.warn('firebase.config_partial', { missingKeys: mode.missingKeys });
+}
 
 let app;
-let auth: any = null;
-let db: any = null;
-let googleProvider: any = null;
-let isDemoMode = true;
+let auth: Auth | null = null;
+let db: Firestore | null = null;
+let googleProvider: GoogleAuthProvider | null = null;
+let isDemoMode = mode.isDemoMode;
+let firebaseConfigError: string | null = mode.configError;
 
-if (hasFirebaseConfig) {
+if (mode.hasFirebaseConfig) {
   try {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     auth = getAuth(app);
     db = getFirestore(app);
     googleProvider = new GoogleAuthProvider();
     isDemoMode = false;
+    firebaseConfigError = null;
   } catch (error) {
-    console.error("Gagal menginisialisasi Firebase SDK asli, beralih ke Mode Demo:", error);
-    isDemoMode = true;
+    logger.error('firebase.init_failed', { error });
+    isDemoMode = false;
+    firebaseConfigError = 'Firebase SDK initialization failed.';
   }
-} else {
-  console.log("Firebase API Key tidak ditemukan. AKRA berjalan dalam Mode Demo dengan simulasi Google Login.");
+} else if (isDemoMode) {
+  logger.info('firebase.demo_mode_active');
+} else if (firebaseConfigError) {
+  logger.warn('firebase.config_missing', { reason: firebaseConfigError });
 }
 
 // Interface for Mock User
@@ -76,10 +91,10 @@ export const simulateGoogleSignIn = (): Promise<MockGoogleUser> => {
 // Fungsi Login Riil dengan Google
 export const signInWithGoogleReal = async () => {
   if (!auth || !googleProvider) {
-    throw new Error("Firebase Auth belum diinisialisasi.");
+    throw new Error(firebaseConfigError || "Firebase Auth belum diinisialisasi.");
   }
   const result = await signInWithPopup(auth, googleProvider);
   return result.user;
 };
 
-export { auth, db, isDemoMode };
+export { auth, db, isDemoMode, firebaseConfigError };

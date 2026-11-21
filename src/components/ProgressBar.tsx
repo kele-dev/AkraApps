@@ -1,5 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
+import { computePercent } from '../lib/idAndMath';
 
 interface ProgressBarProps {
   value: number;
@@ -15,7 +16,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   color = 'emerald'
 }) => {
   const { language } = useApp();
-  const percentage = Math.round((value / max) * 100) || 0;
+  const percentage = computePercent(value, max);
 
   const colorMap = {
     emerald: {

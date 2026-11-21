@@ -2,9 +2,15 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp, translations } from '../../context/AppContext';
-import { getRichBookDetail, RichBookDetail, RICH_BOOK_DATABASE } from './bookDetailsData';
+import { getRichBookDetail, RichBookDetail } from './bookDetailsData';
 import { ArrowLeft, Star, Share2, ChevronDown, ChevronUp, Pen, Check } from 'lucide-react';
 import { ProgressBar } from '../../components/ProgressBar';
+import { BookCover, UserAvatar } from '../../components/Media';
+import { BuddyReadSection } from './BuddyReadSection';
+import { fetchWithTimeout } from '../../lib/http';
+import { resolveUserBookRating } from '../../lib/bookRating';
+import { extractEditionMetadata, type OpenLibraryEditionEntry } from '../../lib/editionMetadata';
+import { logger } from '../../lib/logger';
 
 export const BookDetails: React.FC = () => {
   const { 
@@ -22,7 +28,8 @@ export const BookDetails: React.FC = () => {
     startBuddyRead,
     addBuddyMessage,
     viewBookDetails,
-    language
+    language,
+    showToast
   } = useApp();
 
   const [richDetail, setRichDetail] = useState<RichBookDetail | null>(null);
@@ -37,15 +44,7 @@ export const BookDetails: React.FC = () => {
   const [hoverRating, setHoverRating] = useState<number>(0);
   const [animatingStar, setAnimatingStar] = useState<number | null>(null);
   
-  const [buddyMessageText, setBuddyMessageText] = useState('');
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll chat box when a message is added
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  }, [buddyMessages]);
+  const [followedAuthors, setFollowedAuthors] = useState<string[]>([]);
 
   const shelfDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -67,26 +66,23 @@ export const BookDetails: React.FC = () => {
     if (!selectedBook) return;
 
     let active = true;
-    setIsLoading(true);
-    setIsDescExpanded(false);
-    setIsEditionsExpanded(false);
-
-    setInputPage(undefined);
-
-    // Reset user rating initially
-    const progress = readingProgress.find(p => p.userId === currentUser.id && p.bookId === selectedBook.id);
-    setUserRating(progress && progress.status === 'COMPLETED' ? 5 : 0);
+    const controller = new AbortController();
 
     const loadData = async () => {
+      setIsLoading(true);
+      setIsDescExpanded(false);
+      setIsEditionsExpanded(false);
+      setInputPage(undefined);
+      setUserRating(0);
+
       try {
         let workId = selectedBook.id;
-
 
         // If local book, try to search for it on Open Library first
         if (!workId.startsWith('/')) {
           try {
             const searchUrl = `https://openlibrary.org/search.json?title=${encodeURIComponent(selectedBook.title)}&author=${encodeURIComponent(selectedBook.author)}&limit=1`;
-            const searchRes = await fetch(searchUrl);
+            const searchRes = await fetchWithTimeout(searchUrl, { signal: controller.signal });
             if (searchRes.ok) {
               const searchData = await searchRes.json();
               if (searchData.docs && searchData.docs.length > 0) {
@@ -94,14 +90,16 @@ export const BookDetails: React.FC = () => {
               }
             }
           } catch (err) {
-            console.warn("Failed to lookup local book online:", err);
+            if ((err as { name?: string })?.name !== 'AbortError') {
+              logger.warn('openlibrary.search_lookup_failed', { error: err });
+            }
           }
         }
 
         // If it starts with /works/ or /books/, fetch from Open Library
         if (workId.startsWith('/')) {
           const workUrl = `https://openlibrary.org${workId}.json`;
-          const workRes = await fetch(workUrl);
+          const workRes = await fetchWithTimeout(workUrl, { signal: controller.signal });
           if (!workRes.ok) throw new Error("Gagal mengambil data buku dari Open Library");
           const workData = await workRes.json();
 
@@ -123,89 +121,100 @@ export const BookDetails: React.FC = () => {
           const seed = titleCharSum;
           let rating = parseFloat((3.8 + (seed % 11) * 0.1).toFixed(2));
           let ratingsCount = (seed * 17) % 45000 + 350;
-          
-          try {
-            const ratingsUrl = `https://openlibrary.org${workId}/ratings.json`;
-            const ratingsRes = await fetch(ratingsUrl);
-            if (ratingsRes.ok) {
-              const ratingsData = await ratingsRes.json();
-              if (ratingsData.summary) {
-                if (ratingsData.summary.average && ratingsData.summary.average > 0) {
-                  rating = parseFloat(ratingsData.summary.average.toFixed(2));
-                }
-                if (ratingsData.summary.count && ratingsData.summary.count > 0) {
-                  ratingsCount = ratingsData.summary.count;
-                }
-              }
-            }
-          } catch (err) {
-            console.warn("Failed to fetch ratings from Open Library API:", err);
-          }
-
-          const reviewsCount = Math.max(1, Math.floor(ratingsCount * (0.04 + (seed % 3) * 0.01)));
-
           const publishedDate = workData.first_publish_date || "2015";
-          
-          // Fetch editions to find real page count and binding
           let pages = selectedBook.totalPages || 200;
           let binding = "Paperback";
-          try {
-            const editionsUrl = `https://openlibrary.org${workId}/editions.json?limit=10`;
-            const editionsRes = await fetch(editionsUrl);
-            if (editionsRes.ok) {
-              const editionsData = await editionsRes.json();
-              if (editionsData.entries && editionsData.entries.length > 0) {
-                // Find first edition with a valid page count
-                const withPages = editionsData.entries.find((e: any) => e.number_of_pages && e.number_of_pages > 5);
-                if (withPages) {
-                  pages = withPages.number_of_pages;
-                  if (withPages.physical_format) {
-                    binding = withPages.physical_format;
-                  }
-                } else {
-                  const first = editionsData.entries[0];
-                  if (first.number_of_pages) pages = first.number_of_pages;
-                  if (first.physical_format) binding = first.physical_format;
-                }
-              }
-            }
-          } catch (err) {
-            console.warn("Failed to fetch edition details:", err);
-          }
-
-          // Fetch Author profile
+          let isbn13: string | undefined;
+          let isbn10: string | undefined;
+          let publisher: string | undefined;
+          let editionLanguage: string | undefined;
+          const characters = Array.isArray(workData.subject_people)
+            ? (workData.subject_people as string[]).slice(0, 5)
+            : undefined;
+          const setting = Array.isArray(workData.subject_places) && workData.subject_places.length > 0
+            ? (workData.subject_places as string[]).slice(0, 3).join(', ')
+            : undefined;
           let authorName = selectedBook.author;
           let authorAvatar = "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&h=150&q=80";
           let authorBio = `${authorName} adalah penulis terkemuka yang berkontribusi banyak dalam dunia sastra.`;
           let authorStats = "12 books · 1.2k followers";
 
-          if (workData.authors && workData.authors.length > 0) {
-            try {
-              const authorKey = workData.authors[0].author.key;
-              const authorUrl = `https://openlibrary.org${authorKey}.json`;
-              const authorRes = await fetch(authorUrl);
-              if (authorRes.ok) {
-                const authorData = await authorRes.json();
-                authorName = authorData.name || authorData.personal_name || authorName;
-                
-                if (authorData.bio) {
-                  if (typeof authorData.bio === 'string') {
-                    authorBio = authorData.bio;
-                  } else if (authorData.bio.value) {
-                    authorBio = authorData.bio.value;
-                  }
-                }
+          const authorKey = workData.authors?.[0]?.author?.key as string | undefined;
 
-                if (authorData.photos && authorData.photos.length > 0) {
-                  authorAvatar = `https://covers.openlibrary.org/a/id/${authorData.photos[0]}-M.jpg`;
-                }
-                authorStats = `${(seed % 15) + 3} books · ${((seed * 3) % 20) + 1}k followers`;
+          const [ratingsRes, editionsRes, authorRes] = await Promise.all([
+            fetchWithTimeout(`https://openlibrary.org${workId}/ratings.json`, { signal: controller.signal }).catch((err) => {
+              if ((err as { name?: string })?.name !== 'AbortError') {
+                logger.warn('openlibrary.ratings_fetch_failed', { error: err });
               }
-            } catch (err) {
-              console.warn("Failed to fetch author details:", err);
+              return null;
+            }),
+            fetchWithTimeout(`https://openlibrary.org${workId}/editions.json?limit=10`, { signal: controller.signal }).catch((err) => {
+              if ((err as { name?: string })?.name !== 'AbortError') {
+                logger.warn('openlibrary.editions_fetch_failed', { error: err });
+              }
+              return null;
+            }),
+            authorKey
+              ? fetchWithTimeout(`https://openlibrary.org${authorKey}.json`, { signal: controller.signal }).catch((err) => {
+                  if ((err as { name?: string })?.name !== 'AbortError') {
+                    logger.warn('openlibrary.author_fetch_failed', { error: err });
+                  }
+                  return null;
+                })
+              : Promise.resolve(null),
+          ]);
+
+          if (ratingsRes?.ok) {
+            const ratingsData = await ratingsRes.json();
+            if (ratingsData.summary) {
+              if (ratingsData.summary.average && ratingsData.summary.average > 0) {
+                rating = parseFloat(ratingsData.summary.average.toFixed(2));
+              }
+              if (ratingsData.summary.count && ratingsData.summary.count > 0) {
+                ratingsCount = ratingsData.summary.count;
+              }
             }
           }
 
+          if (editionsRes?.ok) {
+            const editionsData = (await editionsRes.json()) as {
+              entries?: OpenLibraryEditionEntry[];
+            };
+            if (editionsData.entries && editionsData.entries.length > 0) {
+              const withPages = editionsData.entries.find((e) => e.number_of_pages && e.number_of_pages > 5);
+              if (withPages && withPages.number_of_pages) {
+                pages = withPages.number_of_pages;
+                if (withPages.physical_format) binding = withPages.physical_format;
+              } else {
+                const first = editionsData.entries[0];
+                if (first.number_of_pages) pages = first.number_of_pages;
+                if (first.physical_format) binding = first.physical_format;
+              }
+              const meta = extractEditionMetadata(editionsData.entries);
+              isbn13 = meta.isbn13;
+              isbn10 = meta.isbn10;
+              publisher = meta.publisher;
+              editionLanguage = meta.languageLabel;
+            }
+          }
+
+          if (authorRes?.ok) {
+            const authorData = await authorRes.json();
+            authorName = authorData.name || authorData.personal_name || authorName;
+            if (authorData.bio) {
+              if (typeof authorData.bio === 'string') {
+                authorBio = authorData.bio;
+              } else if (authorData.bio.value) {
+                authorBio = authorData.bio.value;
+              }
+            }
+            if (authorData.photos && authorData.photos.length > 0) {
+              authorAvatar = `https://covers.openlibrary.org/a/id/${authorData.photos[0]}-M.jpg`;
+            }
+            authorStats = `${(seed % 15) + 3} books · ${((seed * 3) % 20) + 1}k followers`;
+          }
+
+          const reviewsCount = Math.max(1, Math.floor(ratingsCount * (0.04 + (seed % 3) * 0.01)));
           const currentlyReadingCount = (seed * 11) % 5000 + 150;
           const wantToReadCount = (seed * 47) % 50000 + 1200;
 
@@ -229,7 +238,13 @@ export const BookDetails: React.FC = () => {
               authorBio,
               authorStats,
               currentlyReadingCount,
-              wantToReadCount
+              wantToReadCount,
+              isbn13,
+              isbn10,
+              publisher,
+              editionLanguage,
+              characters,
+              setting,
             });
             setIsLoading(false);
           }
@@ -243,7 +258,9 @@ export const BookDetails: React.FC = () => {
           setIsLoading(false);
         }
       } catch (err) {
-        console.error("Gagal sinkronisasi data dari Open Library API:", err);
+        if ((err as { name?: string })?.name !== 'AbortError') {
+          logger.error('openlibrary.sync_failed', { error: err });
+        }
         const fallbackDetails = getRichBookDetail(selectedBook);
         if (active) {
           setRichDetail(fallbackDetails);
@@ -256,22 +273,15 @@ export const BookDetails: React.FC = () => {
 
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [selectedBook, readingProgress, currentUser]);
+  }, [selectedBook]);
 
   // Get current book state from user's library
   const libraryBook = richDetail ? books.find(b => b.title.toLowerCase() === richDetail.title.toLowerCase() && b.author.toLowerCase() === richDetail.author.toLowerCase()) : null;
   const progress = libraryBook ? readingProgress.find(p => p.userId === currentUser.id && p.bookId === libraryBook.id) : null;
   const currentShelf = progress ? progress.status : null; // 'WANT_TO_READ' | 'READING' | 'COMPLETED' | null
-
-  // Sync inputPage with progress
-  useEffect(() => {
-    if (progress) {
-      setInputPage(progress.currentPage);
-    } else {
-      setInputPage(0);
-    }
-  }, [progress]);
+  const displayedUserRating = userRating || resolveUserBookRating(progress);
 
   if (!selectedBook || !richDetail) {
     return (
@@ -294,7 +304,7 @@ export const BookDetails: React.FC = () => {
   const wantToReadCount = appProgressesForThisBook.filter(p => p.status === 'WANT_TO_READ').length;
   const completedCount = appProgressesForThisBook.filter(p => p.status === 'COMPLETED').length;
 
-  const handleShelfChange = (status: 'WANT_TO_READ' | 'READING' | 'COMPLETED') => {
+  const handleShelfChange = (status: 'WANT_TO_READ' | 'READING' | 'COMPLETED', ratingOverride?: number) => {
     let bookId = libraryBook?.id;
     if (!libraryBook) {
       // Add to library first
@@ -310,7 +320,7 @@ export const BookDetails: React.FC = () => {
 
     if (bookId) {
       const targetPage = status === 'COMPLETED' ? richDetail.totalPages : 0;
-      updateProgress(bookId, targetPage, status);
+      updateProgress(bookId, targetPage, status, ratingOverride);
     }
     setShowShelfDropdown(false);
   };
@@ -319,22 +329,32 @@ export const BookDetails: React.FC = () => {
     setAnimatingStar(rating);
     setUserRating(rating);
     // Mark as read/completed when rated
-    handleShelfChange('COMPLETED');
+    handleShelfChange('COMPLETED', rating);
     setTimeout(() => {
       setAnimatingStar(null);
     }, 450);
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
+    const shareUrl = `${window.location.origin}/?book=${encodeURIComponent(selectedBook.id)}&title=${encodeURIComponent(richDetail.title)}&author=${encodeURIComponent(richDetail.author)}`;
     if (navigator.share) {
-      navigator.share({
-        title: richDetail.title,
-        text: `Lihat buku "${richDetail.title}" oleh ${richDetail.author} di AKRA Apps!`,
-        url: window.location.href,
-      }).catch(err => console.log(err));
-    } else {
-      navigator.clipboard.writeText(window.location.href);
-      alert('Tautan halaman disalin ke papan klip!');
+      try {
+        await navigator.share({
+          title: richDetail.title,
+          text: `Lihat buku "${richDetail.title}" oleh ${richDetail.author} di AKRA Apps!`,
+          url: shareUrl,
+        });
+      } catch (err) {
+        logger.warn('book.share_failed', { error: err });
+      }
+    } else if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        showToast(language === 'id' ? 'Tautan buku disalin ke papan klip!' : 'Book link copied to clipboard!', 'success');
+      } catch (err) {
+        logger.warn('book.clipboard_write_failed', { error: err });
+        showToast(language === 'id' ? 'Gagal menyalin tautan.' : 'Failed to copy link.', 'error');
+      }
     }
   };
 
@@ -410,7 +430,7 @@ export const BookDetails: React.FC = () => {
         className="flex items-center gap-2 mb-6 text-xs font-bold text-text-slate-dark hover:text-brand-orange cursor-pointer transition-colors border border-border-light-gray bg-white py-2 px-4 rounded-full shadow-2xs hover:shadow-xs hover:border-brand-orange/30 transition-all active-pop hover-scale"
       >
         <ArrowLeft size={14} className="text-brand-orange" />
-        Kembali
+        {language === 'id' ? 'Kembali' : 'Back'}
       </button>
 
       {/* Main Grid Layout */}
@@ -420,9 +440,12 @@ export const BookDetails: React.FC = () => {
         <div className="flex flex-col items-center md:items-start gap-5">
           {/* Book Cover */}
           <div className="relative group w-[180px] h-[260px] md:w-[200px] md:h-[290px] rounded-lg overflow-hidden shadow-md border border-border-light-gray shrink-0 bg-gray-50 transition-all duration-300 hover:shadow-lg hover-scale cursor-pointer">
-            <img
+            <BookCover
               src={richDetail.coverImage}
               alt={richDetail.title}
+              width={200}
+              height={290}
+              priority
               className="w-full h-full object-cover"
             />
           </div>
@@ -444,7 +467,7 @@ export const BookDetails: React.FC = () => {
                 className={`flex-1 px-3 flex items-center justify-center gap-2 text-xs font-bold transition-colors border-none cursor-pointer ${
                   currentShelf 
                     ? 'bg-gray-100 text-text-slate-dark hover:bg-gray-200' 
-                    : 'bg-[#409d69] hover:bg-[#348055] text-white'
+                    : 'bg-brand-forest hover:bg-brand-forest-hover text-white'
                 }`}
               >
                 {currentShelf ? (
@@ -466,11 +489,12 @@ export const BookDetails: React.FC = () => {
 
               <button
                 type="button"
+                aria-label={language === 'id' ? 'Pilih rak buku' : 'Choose bookshelf'}
                 onClick={() => setShowShelfDropdown(!showShelfDropdown)}
                 className={`px-2 flex items-center justify-center border-l transition-colors cursor-pointer border-none ${
                   currentShelf 
                     ? 'bg-gray-100 hover:bg-gray-200 border-border-light-gray text-text-slate-medium' 
-                    : 'bg-[#409d69] hover:bg-[#348055] border-white/20 text-white'
+                    : 'bg-brand-forest hover:bg-brand-forest-hover border-white/20 text-white'
                 }`}
               >
                 <ChevronDown size={14} className={`transition-transform duration-200 ${showShelfDropdown ? 'rotate-180' : ''}`} />
@@ -480,15 +504,15 @@ export const BookDetails: React.FC = () => {
             {/* Shelf Dropdown Overlay */}
             {showShelfDropdown && (
               <div className="absolute left-0 right-0 mt-1.5 bg-white border border-border-light-gray rounded-md shadow-md flex flex-col p-1 z-40 divide-y divide-border-light-gray/50 animate-fade-in">
-                {[
+                {([
                   { id: 'WANT_TO_READ', label: translations[language].wantToRead },
                   { id: 'READING', label: translations[language].currentlyReading },
                   { id: 'COMPLETED', label: translations[language].read }
-                ].map((option) => (
+                ] as const).map((option) => (
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() => handleShelfChange(option.id as any)}
+                    onClick={() => handleShelfChange(option.id)}
                     className="w-full text-left px-3 py-2 text-xs font-semibold text-text-slate-medium hover:bg-gray-50 hover:text-text-slate-dark transition-all border-none bg-transparent cursor-pointer flex items-center justify-between"
                   >
                     <span>{option.label}</span>
@@ -508,6 +532,7 @@ export const BookDetails: React.FC = () => {
                 <div className="flex-1 flex items-center gap-1 bg-white border border-border-light-gray rounded-lg px-2 h-8">
                   <input
                     type="number"
+                    aria-label={language === 'id' ? 'Halaman saat ini' : 'Current page'}
                     min={0}
                     max={richDetail.totalPages || 200}
                     value={inputPage !== undefined ? inputPage : (progress ? progress.currentPage : 0)}
@@ -515,7 +540,7 @@ export const BookDetails: React.FC = () => {
                       const val = parseInt(e.target.value);
                       setInputPage(isNaN(val) ? 0 : val);
                     }}
-                    className="w-full text-xs font-bold text-text-slate-dark text-center focus:outline-none border-none bg-transparent"
+                    className="w-full text-xs font-bold text-text-slate-dark text-center border-none bg-transparent focus-visible:ring-2 focus-visible:ring-brand-orange/40 rounded"
                   />
                   <span className="text-[10px] text-text-slate-light font-bold shrink-0">/ {richDetail.totalPages || 200} {translations[language].pagesOf}</span>
                 </div>
@@ -535,20 +560,26 @@ export const BookDetails: React.FC = () => {
 
           {/* Rate this Book Stars */}
           <div className="flex flex-col items-center w-full gap-1.5 mt-1 border-t border-border-light-gray/60 pt-4 select-none">
-            <div className="flex text-gray-200">
+            <div className="flex text-gray-200" role="radiogroup" aria-label={translations[language].rateThisBook}>
               {[1, 2, 3, 4, 5].map((star) => (
-                <Star
+                <button
                   key={star}
-                  size={20}
+                  type="button"
                   onClick={() => handleRateBook(star)}
                   onMouseEnter={() => setHoverRating(star)}
                   onMouseLeave={() => setHoverRating(0)}
-                  className={`cursor-pointer transition-all hover:scale-120 duration-150 ${
-                    star <= (hoverRating || userRating) 
-                      ? "text-yellow-500 fill-current" 
-                      : "text-gray-300"
-                  } ${animatingStar === star ? 'animate-pop' : ''}`}
-                />
+                  aria-label={`${star} ${language === 'id' ? 'bintang' : 'stars'}`}
+                  className="bg-transparent border-none p-0.5 cursor-pointer"
+                >
+                  <Star
+                    size={20}
+                    className={`transition-all hover:scale-120 duration-150 ${
+                      star <= (hoverRating || displayedUserRating) 
+                        ? "text-yellow-500 fill-current" 
+                        : "text-gray-300"
+                    } ${animatingStar === star ? 'animate-pop' : ''}`}
+                  />
+                </button>
               ))}
             </div>
             <span className="text-[11px] text-text-slate-medium font-medium">{translations[language].rateThisBook}</span>
@@ -666,30 +697,49 @@ export const BookDetails: React.FC = () => {
 
             {isEditionsExpanded && (
               <div className="mt-3 pl-3 border-l border-border-light-gray flex flex-col gap-2.5 text-xs text-text-slate-medium animate-slide-in">
+                {(richDetail.isbn13 || richDetail.isbn10) && (
+                  <div className="grid grid-cols-[100px_1fr] gap-2">
+                    <span className="font-semibold text-[#181818]">ISBN:</span>
+                    <span>
+                      {[richDetail.isbn13, richDetail.isbn10 ? `ISBN10: ${richDetail.isbn10}` : null]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                  </div>
+                )}
                 <div className="grid grid-cols-[100px_1fr] gap-2">
-                  <span className="font-semibold text-[#181818]">ISBN:</span>
-                  <span>9789792261882 (ISBN10: 9792261883)</span>
+                  <span className="font-semibold text-[#181818]">Format:</span>
+                  <span>{richDetail.binding}</span>
                 </div>
-                <div className="grid grid-cols-[100px_1fr] gap-2">
-                  <span className="font-semibold text-[#181818]">{language === 'id' ? 'Format:' : 'Format:'}</span>
-                  <span>{richDetail.binding} (Reprint Edition)</span>
-                </div>
-                <div className="grid grid-cols-[100px_1fr] gap-2">
-                  <span className="font-semibold text-[#181818]">{language === 'id' ? 'Penerbit:' : 'Publisher:'}</span>
-                  <span>Gramedia Pustaka Utama</span>
-                </div>
-                <div className="grid grid-cols-[100px_1fr] gap-2">
-                  <span className="font-semibold text-[#181818]">{language === 'id' ? 'Bahasa:' : 'Language:'}</span>
-                  <span>{language === 'id' ? 'Bahasa Indonesia' : 'Indonesian'}</span>
-                </div>
-                <div className="grid grid-cols-[100px_1fr] gap-2">
-                  <span className="font-semibold text-[#181818]">Characters:</span>
-                  <span>Tanya, Dede, Ibu, Danar</span>
-                </div>
-                <div className="grid grid-cols-[100px_1fr] gap-2 flex-wrap">
-                  <span className="font-semibold text-[#181818]">Setting:</span>
-                  <span>Jakarta, Indonesia</span>
-                </div>
+                {richDetail.publisher && (
+                  <div className="grid grid-cols-[100px_1fr] gap-2">
+                    <span className="font-semibold text-[#181818]">{language === 'id' ? 'Penerbit:' : 'Publisher:'}</span>
+                    <span>{richDetail.publisher}</span>
+                  </div>
+                )}
+                {richDetail.editionLanguage && (
+                  <div className="grid grid-cols-[100px_1fr] gap-2">
+                    <span className="font-semibold text-[#181818]">{language === 'id' ? 'Bahasa:' : 'Language:'}</span>
+                    <span>{richDetail.editionLanguage}</span>
+                  </div>
+                )}
+                {richDetail.characters && richDetail.characters.length > 0 && (
+                  <div className="grid grid-cols-[100px_1fr] gap-2">
+                    <span className="font-semibold text-[#181818]">Characters:</span>
+                    <span>{richDetail.characters.join(', ')}</span>
+                  </div>
+                )}
+                {richDetail.setting && (
+                  <div className="grid grid-cols-[100px_1fr] gap-2 flex-wrap">
+                    <span className="font-semibold text-[#181818]">Setting:</span>
+                    <span>{richDetail.setting}</span>
+                  </div>
+                )}
+                {!richDetail.isbn13 && !richDetail.isbn10 && !richDetail.publisher && !richDetail.editionLanguage && (
+                  <p className="text-[11px] text-text-slate-light italic">
+                    {language === 'id' ? 'Detail edisi lengkap belum tersedia untuk buku ini.' : 'Full edition metadata is not available for this title.'}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -705,7 +755,7 @@ export const BookDetails: React.FC = () => {
                         .filter(u => appProgressesForThisBook.some(p => p.userId === u.id && p.status === 'READING'))
                         .slice(0, 3)
                         .map(u => (
-                          <img key={u.id} src={u.avatar} alt="" className="w-5 h-5 rounded-full object-cover border border-white" title={u.displayName} />
+                          <UserAvatar key={u.id} src={u.avatar} alt={u.displayName} width={20} height={20} className="w-5 h-5 rounded-full object-cover border border-white" title={u.displayName} />
                         ))}
                     </div>
                     <span className="text-text-slate-medium font-medium">
@@ -721,7 +771,7 @@ export const BookDetails: React.FC = () => {
                         .filter(u => appProgressesForThisBook.some(p => p.userId === u.id && p.status === 'WANT_TO_READ'))
                         .slice(0, 3)
                         .map(u => (
-                          <img key={u.id} src={u.avatar} alt="" className="w-5 h-5 rounded-full object-cover border border-white" title={u.displayName} />
+                          <UserAvatar key={u.id} src={u.avatar} alt={u.displayName} width={20} height={20} className="w-5 h-5 rounded-full object-cover border border-white" title={u.displayName} />
                         ))}
                     </div>
                     <span className="text-text-slate-medium font-medium">
@@ -737,7 +787,7 @@ export const BookDetails: React.FC = () => {
                         .filter(u => appProgressesForThisBook.some(p => p.userId === u.id && p.status === 'COMPLETED'))
                         .slice(0, 3)
                         .map(u => (
-                          <img key={u.id} src={u.avatar} alt="" className="w-5 h-5 rounded-full object-cover border border-white" title={u.displayName} />
+                          <UserAvatar key={u.id} src={u.avatar} alt={u.displayName} width={20} height={20} className="w-5 h-5 rounded-full object-cover border border-white" title={u.displayName} />
                         ))}
                     </div>
                     <span className="text-text-slate-medium font-medium">
@@ -757,9 +807,11 @@ export const BookDetails: React.FC = () => {
           <div className="border-t border-border-light-gray/60 pt-5 mt-2">
             <h3 className="font-serif text-lg font-bold text-[#181818] mb-4">{translations[language].aboutAuthor}</h3>
             <div className="flex items-start gap-4">
-              <img 
+              <UserAvatar 
                 src={richDetail.authorAvatar || "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&h=150&q=80"} 
                 alt={richDetail.author} 
+                width={56}
+                height={56}
                 className="w-14 h-14 rounded-full object-cover shrink-0 border border-border-light-gray" 
               />
               <div className="flex-1">
@@ -772,8 +824,31 @@ export const BookDetails: React.FC = () => {
                       ✓
                     </span>
                   </div>
-                  <button type="button" className="px-5 py-1 text-xs font-bold text-white bg-black rounded-full hover:bg-neutral-800 transition-colors cursor-pointer border-none shadow-3xs active-pop">
-                    Follow
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const isFollowed = followedAuthors.includes(richDetail.author);
+                      setFollowedAuthors((prev) =>
+                        isFollowed
+                          ? prev.filter((a) => a !== richDetail.author)
+                          : [...prev, richDetail.author]
+                      );
+                      showToast(
+                        isFollowed
+                          ? (language === 'id' ? `Berhenti mengikuti ${richDetail.author}` : `Unfollowed ${richDetail.author}`)
+                          : (language === 'id' ? `Mengikuti ${richDetail.author}` : `Following ${richDetail.author}`),
+                        'success'
+                      );
+                    }}
+                    className={`px-5 py-1 text-xs font-bold rounded-full transition-colors cursor-pointer border-none shadow-xs active-pop ${
+                      followedAuthors.includes(richDetail.author)
+                        ? 'bg-brand-orange text-white hover:bg-brand-orange-hover'
+                        : 'text-white bg-black hover:bg-neutral-800'
+                    }`}
+                  >
+                    {followedAuthors.includes(richDetail.author)
+                      ? (language === 'id' ? 'Mengikuti' : 'Following')
+                      : 'Follow'}
                   </button>
                 </div>
                 
@@ -793,165 +868,20 @@ export const BookDetails: React.FC = () => {
       </div>
 
       {/* ================= Buddy Reads (Membaca Bersama Teman) ================= */}
-      {(() => {
-        const bookIdForBuddy = libraryBook?.id || selectedBook.id;
-        const activeBuddyRead = buddyReads.find(
-          (br) => br.bookId === bookIdForBuddy && br.userIds.includes(currentUser.id)
-        );
-
-        return (
-          <div className="border-t border-border-light-gray/60 pt-6 mt-8">
-            <h3 className="text-sm font-extrabold text-text-slate-dark uppercase tracking-wider flex items-center gap-2">
-              <span>👥</span> Membaca Bersama Teman (Buddy Read)
-            </h3>
-            
-            {activeBuddyRead ? (() => {
-              const buddyUserId = activeBuddyRead.userIds.find(id => id !== currentUser.id);
-              const buddyUser = users.find(u => u.id === buddyUserId);
-
-              const myProgress = readingProgress.find(p => p.userId === currentUser.id && p.bookId === bookIdForBuddy);
-              const myPage = myProgress ? myProgress.currentPage : 0;
-              const myPercent = Math.round((myPage / selectedBook.totalPages) * 100) || 0;
-
-              const buddyProgress = readingProgress.find(p => p.userId === buddyUserId && p.bookId === bookIdForBuddy);
-              const buddyPage = buddyProgress ? buddyProgress.currentPage : 0;
-              const buddyPercent = Math.round((buddyPage / selectedBook.totalPages) * 100) || 0;
-
-              const messages = buddyMessages.filter(m => m.buddyReadId === activeBuddyRead.id);
-
-              return (
-                <div className="flex flex-col gap-4">
-                  {/* Side-by-side Progress Bars */}
-                  <div className="flex flex-col gap-3 bg-gray-50/50 border border-border-light-gray/40 rounded-2xl p-4 mt-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* My Progress */}
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex justify-between text-xs font-bold text-text-slate-medium">
-                          <span className="flex items-center gap-1.5">
-                            <img src={currentUser.avatar} alt="" className="w-4 h-4 rounded-full object-cover" />
-                            <span>Anda</span>
-                          </span>
-                          <span className="text-brand-orange">{myPage} / {selectedBook.totalPages} hal ({myPercent}%)</span>
-                        </div>
-                        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200/20">
-                          <div className="h-full bg-brand-orange transition-all duration-300 rounded-full" style={{ width: `${myPercent}%` }} />
-                        </div>
-                      </div>
-
-                      {/* Buddy Progress */}
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex justify-between text-xs font-bold text-text-slate-medium">
-                          <span className="flex items-center gap-1.5">
-                            <img src={buddyUser?.avatar} alt="" className="w-4 h-4 rounded-full object-cover" />
-                            <span>{buddyUser?.displayName}</span>
-                          </span>
-                          <span className="text-[#348055]">{buddyPage} / {selectedBook.totalPages} hal ({buddyPercent}%)</span>
-                        </div>
-                        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200/20">
-                          <div className="h-full bg-[#348055] transition-all duration-300 rounded-full" style={{ width: `${buddyPercent}%` }} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Spoiler-Free Chat Box */}
-                  <div className="flex flex-col border border-border-light-gray rounded-xl overflow-hidden bg-white shadow-2xs">
-                    {/* Chat Header */}
-                    <div className="bg-bg-light-gray px-4 py-2 border-b border-border-light-gray flex items-center justify-between">
-                      <span className="text-xs font-extrabold text-text-slate-dark">Papan Obrolan Diskusi Privat</span>
-                      <span className="text-[10px] bg-brand-orange-glow border border-brand-orange/20 text-brand-orange px-2 py-0.5 rounded-full font-bold">Bebas Spoiler</span>
-                    </div>
-
-                    {/* Message List */}
-                    <div className="p-4 flex flex-col gap-3 max-h-60 overflow-y-auto bg-slate-50/10" ref={chatContainerRef}>
-                      {messages.length === 0 ? (
-                        <p className="text-center text-[11px] text-text-slate-light py-6 italic font-medium">Belum ada obrolan. Mulai diskusi Anda di sini!</p>
-                      ) : (
-                        messages.map((msg) => {
-                          const isMe = msg.userId === currentUser.id;
-                          return (
-                            <div key={msg.id} className={`flex gap-2.5 items-start ${isMe ? 'flex-row-reverse' : ''}`}>
-                              <img src={msg.userAvatar} alt="" className="w-7 h-7 rounded-full object-cover shrink-0 border border-border-light-gray" />
-                              <div className={`flex flex-col max-w-[75%] ${isMe ? 'items-end' : ''}`}>
-                                <span className="text-[9px] font-bold text-text-slate-light mb-0.5">{msg.userDisplayName}</span>
-                                <div className={`p-2.5 rounded-2xl text-xs leading-relaxed ${
-                                  isMe 
-                                    ? 'bg-brand-orange text-white rounded-tr-none' 
-                                    : 'bg-white border border-border-light-gray text-text-slate-dark rounded-tl-none shadow-3xs'
-                                }`}>
-                                  {msg.content}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-
-                    {/* Message Input Form */}
-                    <form 
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (!buddyMessageText.trim()) return;
-                        addBuddyMessage(activeBuddyRead.id, buddyMessageText);
-                        setBuddyMessageText('');
-                      }}
-                      className="flex border-t border-border-light-gray p-2 gap-2 bg-gray-50/50"
-                    >
-                      <input
-                        type="text"
-                        placeholder="Tulis pesan diskusi di sini..."
-                        value={buddyMessageText}
-                        onChange={(e) => setBuddyMessageText(e.target.value)}
-                        className="flex-1 input-field py-1.5 px-3 text-xs focus:outline-none bg-white rounded-lg h-9"
-                      />
-                      <button
-                        type="submit"
-                        className="btn-primary py-1.5 px-4 rounded-lg text-xs font-bold shrink-0 h-9"
-                      >
-                        Kirim
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              );
-            })() : (
-              <div className="bg-gray-50/50 border border-border-light-gray/40 rounded-2xl p-5 mt-3 flex flex-col gap-3">
-                <p className="text-xs text-text-slate-medium leading-relaxed">
-                  Ingin membaca buku ini bersama teman? Undang mereka untuk membaca bersama, memantau kemajuan membaca satu sama lain secara riil, dan berdiskusi di ruang chat privat tanpa takut spoiler!
-                </p>
-                <div className="flex gap-3 flex-wrap mt-1">
-                  {users.filter(u => u.id !== currentUser.id).map(u => (
-                    <button
-                      key={u.id}
-                      onClick={() => {
-                        let targetBookId = libraryBook?.id;
-                        if (!libraryBook) {
-                          const newBook = addBook(
-                            richDetail.title,
-                            richDetail.author,
-                            richDetail.totalPages,
-                            richDetail.category,
-                            richDetail.coverImage
-                          );
-                          targetBookId = newBook?.id;
-                        }
-                        if (targetBookId) {
-                          startBuddyRead(targetBookId, u.id);
-                        }
-                      }}
-                      className="flex items-center gap-2 text-xs font-bold text-text-slate-dark border border-border-light-gray bg-white py-2 px-4 rounded-full shadow-2xs hover:shadow-xs hover:border-brand-orange/30 transition-all cursor-pointer active-pop hover-scale"
-                    >
-                      <img src={u.avatar} alt="" className="w-5 h-5 rounded-full object-cover" />
-                      <span>Undang {u.displayName}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      })()}
+      <BuddyReadSection
+        selectedBook={selectedBook}
+        libraryBook={libraryBook}
+        richDetail={richDetail}
+        currentUser={currentUser}
+        users={users}
+        readingProgress={readingProgress}
+        buddyReads={buddyReads}
+        buddyMessages={buddyMessages}
+        language={language}
+        addBook={addBook}
+        startBuddyRead={startBuddyRead}
+        addBuddyMessage={addBuddyMessage}
+      />
 
       {/* ================= SIMILAR BOOKS (Mungkin Juga Kamu Suka) ================= */}
       {(() => {
@@ -972,19 +902,22 @@ export const BookDetails: React.FC = () => {
             </h3>
             <div className="flex gap-4 overflow-x-auto pb-3 scrollbar-none snap-x snap-mandatory">
               {allSimilar.map((book, idx) => (
-                <div
+                <button
+                  type="button"
                   key={book.id || idx}
                   onClick={() => {
                     // If it's a real library book, navigate to it
                     const realBook = books.find(b => b.id === book.id);
                     if (realBook) viewBookDetails(realBook);
                   }}
-                  className="flex flex-col gap-2 min-w-[110px] max-w-[110px] shrink-0 snap-start cursor-pointer group"
+                  className="text-left bg-transparent border-none p-0 flex flex-col gap-2 min-w-[110px] max-w-[110px] shrink-0 snap-start cursor-pointer group"
                 >
                   <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden border border-border-light-gray shadow-2xs group-hover:shadow-sm transition-all bg-gray-50">
-                    <img
+                    <BookCover
                       src={book.coverImage}
                       alt={book.title}
+                      width={110}
+                      height={165}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                     {/* Rating badge */}
@@ -1002,7 +935,7 @@ export const BookDetails: React.FC = () => {
                       {book.category}
                     </span>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>

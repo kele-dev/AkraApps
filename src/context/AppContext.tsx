@@ -1,30 +1,42 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import type { User, Book, ReadingProgress, Post, ReadingGoal, Comment, Story, Shelf, BuddyRead, BuddyMessage, Notification } from '../types';
-import { auth, db, isDemoMode, simulateGoogleSignIn, signInWithGoogleReal } from '../lib/firebase';
+import { auth, db, isDemoMode, firebaseConfigError, simulateGoogleSignIn, signInWithGoogleReal } from '../lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, doc, setDoc, getDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, query, where, limit, deleteDoc, writeBatch } from 'firebase/firestore';
+import { canDeletePost, filterOwnedRecordsForSync, FIRESTORE_QUERY_LIMITS } from '../lib/firestoreSync';
+import { computeProgressTransition } from '../lib/progressUtils';
+import { safeStorageGet, safeStorageRemove, safeStorageSet } from '../lib/storage';
+import { clampGoalTarget, createUniqueId } from '../lib/idAndMath';
+import { createNotificationRecord } from '../lib/notificationUtils';
+import { logger } from '../lib/logger';
 
 // Helper to recursively clean undefined values for Firestore
-const cleanUndefined = (obj: any): any => {
-  if (obj === null || obj === undefined) return null;
-  const newObj = { ...obj };
+const cleanUndefined = <T,>(obj: T): T => {
+  if (obj === null || obj === undefined || typeof obj !== 'object') return obj;
+  const newObj: Record<string, unknown> = { ...(obj as Record<string, unknown>) };
   Object.keys(newObj).forEach((key) => {
-    if (newObj[key] === undefined) {
+    const val = newObj[key];
+    if (val === undefined) {
       delete newObj[key];
-    } else if (newObj[key] !== null && typeof newObj[key] === 'object') {
-      if (Array.isArray(newObj[key])) {
-        newObj[key] = newObj[key].map((item: any) => 
-          item !== null && typeof item === 'object' ? cleanUndefined(item) : item
+    } else if (val !== null && typeof val === 'object') {
+      if (Array.isArray(val)) {
+        newObj[key] = val.map((item: unknown) =>
+          item !== null && typeof item === 'object'
+            ? cleanUndefined(item)
+            : item
         );
       } else {
-        newObj[key] = cleanUndefined(newObj[key]);
+        newObj[key] = cleanUndefined(val);
       }
     }
   });
-  return newObj;
+  return newObj as T;
 };
+
+const toFirestoreData = <T extends object>(obj: T): Record<string, unknown> =>
+  cleanUndefined({ ...obj }) as Record<string, unknown>;
 
 interface AppContextProps {
   currentUser: User;
@@ -71,11 +83,17 @@ interface AppContextProps {
   addBuddyMessage: (buddyReadId: string, content: string) => void;
   notifications: Notification[];
   unreadNotificationCount: number;
+  markNotificationRead: (notificationId: string) => void;
   markAllNotificationsRead: () => void;
   followUser: (targetUserId: string) => void;
   isFollowing: (targetUserId: string) => boolean;
   language: 'id' | 'en';
   setLanguage: (lang: 'id' | 'en') => void;
+  actionError: string | null;
+  clearActionError: () => void;
+  toast: { message: string; type: 'success' | 'error' | 'info' } | null;
+  showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
+  clearToast: () => void;
 }
 
 const AppContext = createContext<AppContextProps | undefined>(undefined);
@@ -89,46 +107,48 @@ const GUEST_USER: User = {
   bio: 'Silakan masuk dengan Google untuk menyimpan data membaca.'
 };
 
-// INITIAL MOCK DATA
-const INITIAL_USERS: User[] = [];
-const INITIAL_BOOKS: Book[] = [];
-const INITIAL_PROGRESS = (userId: string): ReadingProgress[] => [];
-const INITIAL_POSTS = (userId: string, userDisplayName: string, userAvatar: string): Post[] => [];
-const INITIAL_STORIES = (userId: string): Story[] => [];
-const INITIAL_GOALS = (userId: string): ReadingGoal[] => [];
-const INITIAL_BUDDY_READS = (userId: string): BuddyRead[] => [];
-const INITIAL_NOTIFICATIONS = (currentUserId: string): Notification[] => [];
-const getInitialBuddyMessages = (currentUserId: string, currentUserDisplayName: string, currentUserAvatar: string): BuddyMessage[] => [];
-
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Merge localStorage users with INITIAL_USERS to include new social fields
-  const mergedInitialUsers = INITIAL_USERS.map(initialUser => {
-    const stored = typeof window !== 'undefined' 
-      ? localStorage.getItem(`akra_user_${initialUser.id}`) 
-      : null;
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return { ...initialUser, ...parsed }; // INITIAL_USERS provides new fields as defaults
-    }
-    return initialUser;
-  });
-  const [users, setUsers] = useState<User[]>(mergedInitialUsers);
+  const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User>(GUEST_USER);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [language, setLanguageState] = useState<'id' | 'en'>('id');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const clearActionError = () => setActionError(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const clearToast = () => setToast(null);
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   // Load language preference on load
   useEffect(() => {
-    const savedLang = localStorage.getItem('akra_language');
-    if (savedLang === 'id' || savedLang === 'en') {
-      setLanguageState(savedLang);
-    }
+    const timer = setTimeout(() => {
+      try {
+        const savedLang = typeof window !== 'undefined' ? localStorage.getItem('akra_language') : null;
+        if (savedLang === 'id' || savedLang === 'en') {
+          setLanguageState(savedLang);
+        }
+      } catch {
+        // Ignore storage access failures
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const setLanguage = (lang: 'id' | 'en') => {
     setLanguageState(lang);
-    localStorage.setItem('akra_language', lang);
+    try {
+      if (typeof window !== 'undefined') localStorage.setItem('akra_language', lang);
+    } catch {
+      // Ignore storage access failures
+    }
   };
   
   // Browsing Profiles state
@@ -141,14 +161,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [previousTab, setPreviousTab] = useState<string>('books');
 
-  const viewBookDetails = (book: Book) => {
-    setPreviousTab(currentTab === 'book-details' ? previousTab : currentTab);
-    setSelectedBook(book);
-    setCurrentTab('book-details');
-  };
-
   // Core App states
-  const [books, setBooks] = useState<Book[]>(INITIAL_BOOKS);
+  const [books, setBooks] = useState<Book[]>([]);
   const [readingProgress, setReadingProgress] = useState<ReadingProgress[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [goals, setGoals] = useState<ReadingGoal[]>([]);
@@ -159,21 +173,294 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [buddyMessages, setBuddyMessages] = useState<BuddyMessage[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
+  const viewBookDetails = (book: Book) => {
+    setPreviousTab(currentTab === 'book-details' ? previousTab : currentTab);
+    setSelectedBook(book);
+    setCurrentTab('book-details');
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('book', book.id);
+      url.searchParams.set('title', book.title);
+      url.searchParams.set('author', book.author);
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
+
+  useEffect(() => {
+    if (!isLoaded || typeof window === 'undefined') return;
+    const searchParams = new URLSearchParams(window.location.search);
+    const sharedBookId = searchParams.get('book');
+    if (!sharedBookId) return;
+    const matched = books.find((b) => b.id === sharedBookId);
+    const sharedBook: Book = matched || {
+      id: sharedBookId,
+      title: searchParams.get('title') || 'Buku Pilihan',
+      author: searchParams.get('author') || 'Penulis',
+      coverImage: 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=300&q=80',
+      totalPages: 200,
+    };
+    const timer = setTimeout(() => {
+      setSelectedBook(sharedBook);
+      setCurrentTab('book-details');
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [isLoaded]);
+
+  // 3. Per-slice LocalStorage persistence (avoids re-serializing all 10 keys on unrelated updates)
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_books`, books);
+  }, [books, currentUser.id, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_progress`, readingProgress);
+  }, [readingProgress, currentUser.id, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_posts`, posts);
+  }, [posts, currentUser.id, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_goals`, goals);
+  }, [goals, currentUser.id, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_stories`, stories);
+  }, [stories, currentUser.id, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_saved_bookmarks`, savedPostIds);
+  }, [savedPostIds, currentUser.id, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_shelves`, shelves);
+  }, [shelves, currentUser.id, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_buddy_reads`, buddyReads);
+  }, [buddyReads, currentUser.id, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_buddy_messages`, buddyMessages);
+  }, [buddyMessages, currentUser.id, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest') return;
+    safeStorageSet(`akra_${currentUser.id}_notifications`, notifications);
+  }, [notifications, currentUser.id, isLoaded]);
+
+  // Sync from Firestore
+  const syncDataFromFirestore = async (userId: string, userObj: User) => {
+    const firestoreDb = db;
+    if (!firestoreDb) return;
+    try {
+      // 1. Fetch Logged In User Profile from Firestore
+      const userDocRef = doc(firestoreDb, 'users', userId);
+      const userDocSnap = await getDoc(userDocRef);
+      let finalUser = userObj;
+      if (userDocSnap.exists()) {
+        finalUser = userDocSnap.data() as User;
+        setCurrentUser(finalUser);
+      } else {
+        // First time logging in, save the profile
+        await setDoc(userDocRef, toFirestoreData(userObj));
+        setCurrentUser(userObj);
+      }
+      setIsLoggedIn(true);
+
+      const booksQuery = query(collection(firestoreDb, 'books'), limit(FIRESTORE_QUERY_LIMITS.books));
+      const usersQuery = query(collection(firestoreDb, 'users'), limit(FIRESTORE_QUERY_LIMITS.users));
+      const progressQuery = query(collection(firestoreDb, 'progress'), limit(FIRESTORE_QUERY_LIMITS.progress));
+      const goalsQuery = query(
+        collection(firestoreDb, 'goals'),
+        where('userId', '==', userId),
+        limit(FIRESTORE_QUERY_LIMITS.goals)
+      );
+      const postsQuery = query(collection(firestoreDb, 'posts'), limit(FIRESTORE_QUERY_LIMITS.posts));
+      const storiesQuery = query(collection(firestoreDb, 'stories'), limit(FIRESTORE_QUERY_LIMITS.stories));
+      const shelvesQuery = query(collection(firestoreDb, 'shelves'), limit(FIRESTORE_QUERY_LIMITS.shelves));
+      const buddyReadsQuery = query(
+        collection(firestoreDb, 'buddyReads'),
+        where('userIds', 'array-contains', userId),
+        limit(FIRESTORE_QUERY_LIMITS.buddyReads)
+      );
+      const buddyMessagesQuery = query(
+        collection(firestoreDb, 'buddyMessages'),
+        limit(FIRESTORE_QUERY_LIMITS.buddyMessages)
+      );
+      const notificationsQuery = query(
+        collection(firestoreDb, 'notifications'),
+        where('userId', '==', userId),
+        limit(FIRESTORE_QUERY_LIMITS.notifications)
+      );
+
+      const [
+        booksSnap,
+        usersSnap,
+        progressSnap,
+        goalsSnap,
+        postsSnap,
+        storiesSnap,
+        shelvesSnap,
+        buddyReadsSnap,
+        buddyMessagesSnap,
+        notificationsSnap,
+      ] = await Promise.all([
+        getDocs(booksQuery),
+        getDocs(usersQuery),
+        getDocs(progressQuery),
+        getDocs(goalsQuery),
+        getDocs(postsQuery),
+        getDocs(storiesQuery),
+        getDocs(shelvesQuery),
+        getDocs(buddyReadsQuery),
+        getDocs(buddyMessagesQuery),
+        getDocs(notificationsQuery),
+      ]);
+
+      const booksList: Book[] = [];
+      booksSnap.forEach((docSnap) => {
+        booksList.push(docSnap.data() as Book);
+      });
+      setBooks(booksList);
+
+      const usersList: User[] = [];
+      usersSnap.forEach((docSnap) => {
+        usersList.push(docSnap.data() as User);
+      });
+      setUsers(usersList);
+
+      const progressList: ReadingProgress[] = [];
+      progressSnap.forEach((docSnap) => {
+        progressList.push(docSnap.data() as ReadingProgress);
+      });
+      setReadingProgress(progressList);
+
+      const goalsList: ReadingGoal[] = [];
+      goalsSnap.forEach((docSnap) => {
+        goalsList.push(docSnap.data() as ReadingGoal);
+      });
+      setGoals(goalsList);
+
+      const postsList: Post[] = [];
+      postsSnap.forEach((docSnap) => {
+        postsList.push(docSnap.data() as Post);
+      });
+      setPosts(postsList);
+
+      const storiesList: Story[] = [];
+      storiesSnap.forEach((docSnap) => {
+        storiesList.push(docSnap.data() as Story);
+      });
+      setStories(storiesList);
+
+      const shelvesList: Shelf[] = [];
+      shelvesSnap.forEach((docSnap) => {
+        shelvesList.push(docSnap.data() as Shelf);
+      });
+      setShelves(shelvesList);
+
+      const buddyReadsList: BuddyRead[] = [];
+      buddyReadsSnap.forEach((docSnap) => {
+        buddyReadsList.push(docSnap.data() as BuddyRead);
+      });
+      setBuddyReads(buddyReadsList);
+
+      const buddyMessagesList: BuddyMessage[] = [];
+      buddyMessagesSnap.forEach((docSnap) => {
+        buddyMessagesList.push(docSnap.data() as BuddyMessage);
+      });
+      setBuddyMessages(buddyMessagesList);
+
+      const notificationsList: Notification[] = [];
+      notificationsSnap.forEach((docSnap) => {
+        notificationsList.push(docSnap.data() as Notification);
+      });
+      setNotifications(notificationsList);
+    } catch (e) {
+      logger.warn('firestore.inbound_sync_fallback', { error: e });
+      const prefix = `akra_${userId}_`;
+      setBooks(safeStorageGet<Book[]>(`${prefix}books`, []));
+      setReadingProgress(safeStorageGet<ReadingProgress[]>(`${prefix}progress`, []));
+      setGoals(safeStorageGet<ReadingGoal[]>(`${prefix}goals`, []));
+      setPosts(safeStorageGet<Post[]>(`${prefix}posts`, []));
+      setStories(safeStorageGet<Story[]>(`${prefix}stories`, []));
+      setSavedPostIds(safeStorageGet<string[]>(`${prefix}saved_bookmarks`, []));
+      setShelves(safeStorageGet<Shelf[]>(`${prefix}shelves`, []));
+      setBuddyReads(safeStorageGet<BuddyRead[]>(`${prefix}buddy_reads`, []));
+      setBuddyMessages(safeStorageGet<BuddyMessage[]>(`${prefix}buddy_messages`, []));
+      setNotifications(safeStorageGet<Notification[]>(`${prefix}notifications`, []));
+    }
+  };
+
+  // Sync to Firestore via chunked writeBatch (only current user's owned documents)
+  const syncDataToFirestore = async () => {
+    const firestoreDb = db;
+    if (isDemoMode || !firestoreDb || currentUser.id === 'guest') return;
+    try {
+      const owned = filterOwnedRecordsForSync(currentUser.id, {
+        readingProgress,
+        goals,
+        posts,
+        stories,
+        shelves,
+        buddyReads,
+        buddyMessages,
+        notifications,
+      });
+
+      const ops: Array<{ ref: ReturnType<typeof doc>; data: Record<string, unknown> }> = [
+        ...books.map((book) => ({ ref: doc(firestoreDb, 'books', book.id), data: toFirestoreData(book) })),
+        ...owned.readingProgress.map((p) => ({ ref: doc(firestoreDb, 'progress', p.id), data: toFirestoreData(p) })),
+        ...owned.goals.map((g) => ({ ref: doc(firestoreDb, 'goals', `${g.userId}_${g.year}`), data: toFirestoreData(g) })),
+        ...owned.posts.map((post) => ({ ref: doc(firestoreDb, 'posts', post.id), data: toFirestoreData(post) })),
+        ...owned.stories.map((story) => ({ ref: doc(firestoreDb, 'stories', story.id), data: toFirestoreData(story) })),
+        ...owned.shelves.map((shelf) => ({ ref: doc(firestoreDb, 'shelves', shelf.id), data: toFirestoreData(shelf) })),
+        ...owned.buddyReads.map((br) => ({ ref: doc(firestoreDb, 'buddyReads', br.id), data: toFirestoreData(br) })),
+        ...owned.buddyMessages.map((bm) => ({ ref: doc(firestoreDb, 'buddyMessages', bm.id), data: toFirestoreData(bm) })),
+        ...owned.notifications.map((notif) => ({ ref: doc(firestoreDb, 'notifications', notif.id), data: toFirestoreData(notif) })),
+      ];
+
+      const CHUNK_SIZE = 450;
+      for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
+        const batch = writeBatch(firestoreDb);
+        for (const op of ops.slice(i, i + CHUNK_SIZE)) {
+          batch.set(op.ref, op.data);
+        }
+        await batch.commit();
+      }
+    } catch (e) {
+      logger.error('firestore.outbound_sync_failed', { error: e });
+    }
+  };
+
   // 1. Listen to Real Firebase Auth (if not demo mode)
   useEffect(() => {
     if (isDemoMode) {
-      // Load user session from LocalStorage
-      const savedUser = localStorage.getItem('akra_current_user');
-      if (savedUser) {
-        const parsed = JSON.parse(savedUser);
-        // Merge with INITIAL_USERS to populate any new fields (like social fields)
-        const initialMatch = INITIAL_USERS.find(u => u.id === parsed.id);
-        const mergedUser = initialMatch ? { ...initialMatch, ...parsed } : parsed;
-        setCurrentUser(mergedUser);
-        setIsLoggedIn(true);
-      }
-      setIsLoaded(true);
-      return;
+      const timer = setTimeout(() => {
+        const parsed = safeStorageGet<User | null>('akra_current_user', null);
+        if (parsed && typeof parsed === 'object' && parsed.id) {
+          setCurrentUser(parsed);
+          setIsLoggedIn(true);
+        }
+        setIsLoaded(true);
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+
+    if (!auth) {
+      const timer = setTimeout(() => {
+        setIsLoaded(true);
+      }, 0);
+      return () => clearTimeout(timer);
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -203,263 +490,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // 2. Load User Specific LocalStorage Data (Demo Mode & Fallback)
   useEffect(() => {
-    if (!isLoaded || currentUser.id === 'guest') return;
+    if (!isLoaded || currentUser.id === 'guest' || !isDemoMode) return;
 
-    if (isDemoMode) {
+    const timer = setTimeout(() => {
       const prefix = `akra_${currentUser.id}_`;
-      const savedBooks = localStorage.getItem(`${prefix}books`);
-      const savedProgress = localStorage.getItem(`${prefix}progress`);
-      const savedPosts = localStorage.getItem(`${prefix}posts`);
-      const savedGoals = localStorage.getItem(`${prefix}goals`);
+      const savedBooks = safeStorageGet<Book[]>(`${prefix}books`, []);
+      setBooks(Array.isArray(savedBooks) ? savedBooks : []);
 
-      if (savedBooks) {
-        setBooks(JSON.parse(savedBooks));
-      } else {
-        setBooks(INITIAL_BOOKS);
-      }
+      const savedProgress = safeStorageGet<ReadingProgress[]>(`${prefix}progress`, []);
+      setReadingProgress(
+        Array.isArray(savedProgress)
+          ? savedProgress.filter((p) => !p.userId.startsWith('user_'))
+          : []
+      );
 
-      if (savedProgress) {
-        const parsed = JSON.parse(savedProgress);
-        const filtered = parsed.filter((p: ReadingProgress) => !p.userId.startsWith('user_'));
-        setReadingProgress(filtered);
-      } else {
-        setReadingProgress(INITIAL_PROGRESS(currentUser.id));
-      }
+      const savedPosts = safeStorageGet<Post[]>(`${prefix}posts`, []);
+      setPosts(
+        Array.isArray(savedPosts)
+          ? savedPosts.filter(
+              (p) =>
+                !(
+                  p.userId.startsWith('user_') ||
+                  ['Rachel Amanda', 'Dimas Aditya', 'Aditya Wibowo', 'Siti Rahma', 'Budi Santoso'].includes(p.userDisplayName) ||
+                  p.content.includes("Kita tidak bisa mengendalikan hal eksternal") ||
+                  p.content.includes("fiksi bersama")
+                )
+            )
+          : []
+      );
 
-      if (savedPosts) {
-        const parsed = JSON.parse(savedPosts);
-        const filtered = parsed.filter((p: Post) => {
-          return !(p.userId.startsWith('user_') || 
-                   ['Rachel Amanda', 'Dimas Aditya', 'Aditya Wibowo', 'Siti Rahma', 'Budi Santoso'].includes(p.userDisplayName) ||
-                   p.content.includes("Kita tidak bisa mengendalikan hal eksternal") ||
-                   p.content.includes("fiksi bersama"));
-        });
-        setPosts(filtered);
-      } else {
-        setPosts(INITIAL_POSTS(currentUser.id, currentUser.displayName, currentUser.avatar));
-      }
+      const savedGoals = safeStorageGet<ReadingGoal[]>(`${prefix}goals`, []);
+      setGoals(
+        Array.isArray(savedGoals)
+          ? savedGoals.filter((g) => !g.userId.startsWith('user_'))
+          : []
+      );
 
-      if (savedGoals) {
-        const parsed = JSON.parse(savedGoals);
-        const filtered = parsed.filter((g: ReadingGoal) => !g.userId.startsWith('user_'));
-        setGoals(filtered);
-      } else {
-        setGoals(INITIAL_GOALS(currentUser.id));
-      }
+      const savedStories = safeStorageGet<Story[]>(`${prefix}stories`, []);
+      setStories(
+        Array.isArray(savedStories)
+          ? savedStories.filter((s) => !s.userId.startsWith('user_'))
+          : []
+      );
 
-      const savedStories = localStorage.getItem(`${prefix}stories`);
-      const savedBookmarks = localStorage.getItem(`${prefix}saved_bookmarks`);
+      const savedBookmarks = safeStorageGet<string[]>(`${prefix}saved_bookmarks`, []);
+      setSavedPostIds(Array.isArray(savedBookmarks) ? savedBookmarks : []);
 
-      if (savedStories) {
-        const parsed = JSON.parse(savedStories);
-        const filtered = parsed.filter((s: Story) => !s.userId.startsWith('user_'));
-        setStories(filtered);
-      } else {
-        setStories(INITIAL_STORIES(currentUser.id));
-      }
+      const savedShelves = safeStorageGet<Shelf[]>(`${prefix}shelves`, []);
+      setShelves(Array.isArray(savedShelves) ? savedShelves : []);
 
-      if (savedBookmarks) {
-        setSavedPostIds(JSON.parse(savedBookmarks));
-      } else {
-        setSavedPostIds([]);
-      }
+      const savedBuddyReads = safeStorageGet<BuddyRead[]>(`${prefix}buddy_reads`, []);
+      setBuddyReads(Array.isArray(savedBuddyReads) ? savedBuddyReads : []);
 
-      const savedShelves = localStorage.getItem(`${prefix}shelves`);
-      if (savedShelves) {
-        setShelves(JSON.parse(savedShelves));
-      } else {
-        setShelves([]);
-      }
+      const savedBuddyMessages = safeStorageGet<BuddyMessage[]>(`${prefix}buddy_messages`, []);
+      setBuddyMessages(Array.isArray(savedBuddyMessages) ? savedBuddyMessages : []);
 
-      const savedBuddyReads = localStorage.getItem(`${prefix}buddy_reads`);
-      if (savedBuddyReads) {
-        setBuddyReads(JSON.parse(savedBuddyReads));
-      } else {
-        setBuddyReads(INITIAL_BUDDY_READS(currentUser.id));
-      }
+      const savedNotifications = safeStorageGet<Notification[]>(`${prefix}notifications`, []);
+      setNotifications(Array.isArray(savedNotifications) ? savedNotifications : []);
+    }, 0);
 
-      const savedBuddyMessages = localStorage.getItem(`${prefix}buddy_messages`);
-      if (savedBuddyMessages) {
-        setBuddyMessages(JSON.parse(savedBuddyMessages));
-      } else {
-        setBuddyMessages(getInitialBuddyMessages(currentUser.id, currentUser.displayName, currentUser.avatar));
-      }
-
-      const savedNotifications = localStorage.getItem(`${prefix}notifications`);
-      if (savedNotifications) {
-        setNotifications(JSON.parse(savedNotifications));
-      } else {
-        setNotifications(INITIAL_NOTIFICATIONS(currentUser.id));
-      }
-    }
+    return () => clearTimeout(timer);
   }, [currentUser, isLoaded]);
 
-  // 3. Save User Specific Data when state changes (Always mirror to LocalStorage, sync to Firestore if real)
+  // Debounced Firestore batch sync for synced collections
   useEffect(() => {
-    if (!isLoaded || currentUser.id === 'guest') return;
-
-    const prefix = `akra_${currentUser.id}_`;
-    localStorage.setItem(`${prefix}books`, JSON.stringify(books));
-    localStorage.setItem(`${prefix}progress`, JSON.stringify(readingProgress));
-    localStorage.setItem(`${prefix}posts`, JSON.stringify(posts));
-    localStorage.setItem(`${prefix}goals`, JSON.stringify(goals));
-    localStorage.setItem(`${prefix}stories`, JSON.stringify(stories));
-    localStorage.setItem(`${prefix}saved_bookmarks`, JSON.stringify(savedPostIds));
-    localStorage.setItem(`${prefix}shelves`, JSON.stringify(shelves));
-    localStorage.setItem(`${prefix}buddy_reads`, JSON.stringify(buddyReads));
-    localStorage.setItem(`${prefix}buddy_messages`, JSON.stringify(buddyMessages));
-    localStorage.setItem(`${prefix}notifications`, JSON.stringify(notifications));
-
-    if (!isDemoMode) {
-      syncDataToFirestore();
-    }
-  }, [books, readingProgress, posts, goals, stories, savedPostIds, shelves, buddyReads, buddyMessages, notifications, currentUser, isLoaded]);
-
-  // Sync from Firestore
-  const syncDataFromFirestore = async (userId: string, userObj: User) => {
-    try {
-      // 1. Fetch Logged In User Profile from Firestore
-      const userDocRef = doc(db, 'users', userId);
-      const userDocSnap = await getDoc(userDocRef);
-      let finalUser = userObj;
-      if (userDocSnap.exists()) {
-        finalUser = userDocSnap.data() as User;
-        setCurrentUser(finalUser);
-      } else {
-        // First time logging in, save the profile
-        await setDoc(userDocRef, cleanUndefined(userObj));
-        setCurrentUser(userObj);
-      }
-      setIsLoggedIn(true);
-
-      // Query Books
-      const booksQuery = query(collection(db, 'books'));
-      const booksSnap = await getDocs(booksQuery);
-      const booksList: Book[] = [];
-      booksSnap.forEach((docSnap) => {
-        booksList.push(docSnap.data() as Book);
-      });
-      setBooks(booksList.length > 0 ? booksList : INITIAL_BOOKS);
-
-      // 2. Query Users (all registered members) to populate the social network feed
-      const usersQuery = query(collection(db, 'users'));
-      const usersSnap = await getDocs(usersQuery);
-      const usersList: User[] = [];
-      usersSnap.forEach((docSnap) => {
-        const u = docSnap.data() as User;
-        if (u.id.startsWith('user_') || ['Rachel Amanda', 'Dimas Aditya', 'Aditya Wibowo', 'Siti Rahma', 'Budi Santoso'].includes(u.displayName)) {
-          deleteDoc(doc(db, 'users', docSnap.id)).catch(err => console.warn("Failed to delete mock user:", err));
-        } else {
-          usersList.push(u);
-        }
-      });
-      
-      // Merge with initial users to ensure default demo accounts exist if not in Firestore
-      const existingUserIds = new Set(usersList.map(u => u.id));
-      const mergedUsers = [...usersList];
-      for (const u of INITIAL_USERS) {
-        if (!existingUserIds.has(u.id)) {
-          mergedUsers.push(u);
-        }
-      }
-      setUsers(mergedUsers);
-
-      // Query Progress
-      const progressQuery = query(collection(db, 'progress'));
-      const progressSnap = await getDocs(progressQuery);
-      const progressList: ReadingProgress[] = [];
-      progressSnap.forEach((docSnap) => {
-        const p = docSnap.data() as ReadingProgress;
-        if (p.userId.startsWith('user_')) {
-          deleteDoc(doc(db, 'progress', docSnap.id)).catch(err => console.warn(err));
-        } else {
-          progressList.push(p);
-        }
-      });
-      setReadingProgress(progressList.length > 0 ? progressList : INITIAL_PROGRESS(userId));
-
-      // Query Goals
-      const goalsQuery = query(collection(db, 'goals'));
-      const goalsSnap = await getDocs(goalsQuery);
-      const goalsList: ReadingGoal[] = [];
-      goalsSnap.forEach((docSnap) => {
-        const g = docSnap.data() as ReadingGoal;
-        if (g.userId.startsWith('user_')) {
-          deleteDoc(doc(db, 'goals', docSnap.id)).catch(err => console.warn(err));
-        } else {
-          goalsList.push(g);
-        }
-      });
-      setGoals(goalsList.length > 0 ? goalsList : INITIAL_GOALS(userId));
-
-      // Query Posts
-      const postsQuery = query(collection(db, 'posts'));
-      const postsSnap = await getDocs(postsQuery);
-      const postsList: Post[] = [];
-      postsSnap.forEach((docSnap) => {
-        const p = docSnap.data() as Post;
-        const isMock = p.userId.startsWith('user_') || 
-                       ['Rachel Amanda', 'Dimas Aditya', 'Aditya Wibowo', 'Siti Rahma', 'Budi Santoso'].includes(p.userDisplayName) ||
-                       p.content.includes("Kita tidak bisa mengendalikan hal eksternal") ||
-                       p.content.includes("fiksi bersama");
-        if (isMock) {
-          deleteDoc(doc(db, 'posts', docSnap.id)).catch(err => console.warn("Failed to delete mock post:", err));
-        } else {
-          postsList.push(p);
-        }
-      });
-      setPosts(postsList.length > 0 ? postsList : INITIAL_POSTS(userId, finalUser.displayName, finalUser.avatar));
-    } catch (e) {
-      console.warn("Gagal sinkronisasi data masuk dari Firestore, beralih ke LocalStorage:", e);
-      const prefix = `akra_${userId}_`;
-      const savedBooks = localStorage.getItem(`${prefix}books`);
-      const savedProgress = localStorage.getItem(`${prefix}progress`);
-      const savedPosts = localStorage.getItem(`${prefix}posts`);
-      const savedGoals = localStorage.getItem(`${prefix}goals`);
-      const savedStories = localStorage.getItem(`${prefix}stories`);
-      const savedBookmarks = localStorage.getItem(`${prefix}saved_bookmarks`);
-      const savedShelves = localStorage.getItem(`${prefix}shelves`);
-      const savedBuddyReads = localStorage.getItem(`${prefix}buddy_reads`);
-      const savedBuddyMessages = localStorage.getItem(`${prefix}buddy_messages`);
-      const savedNotifications = localStorage.getItem(`${prefix}notifications`);
-
-      if (savedBooks) setBooks(JSON.parse(savedBooks));
-      if (savedProgress) setReadingProgress(JSON.parse(savedProgress));
-      if (savedGoals) setGoals(JSON.parse(savedGoals));
-      if (savedPosts) setPosts(JSON.parse(savedPosts));
-      if (savedStories) setStories(JSON.parse(savedStories));
-      if (savedBookmarks) setSavedPostIds(JSON.parse(savedBookmarks));
-      if (savedShelves) setShelves(JSON.parse(savedShelves));
-      if (savedBuddyReads) setBuddyReads(JSON.parse(savedBuddyReads));
-      if (savedBuddyMessages) setBuddyMessages(JSON.parse(savedBuddyMessages));
-      if (savedNotifications) setNotifications(JSON.parse(savedNotifications));
-    }
-  };
-
-  // Sync to Firestore
-  const syncDataToFirestore = async () => {
-    if (isDemoMode || currentUser.id === 'guest') return;
-    try {
-      // Sync Books
-      for (const book of books) {
-        await setDoc(doc(db, 'books', book.id), cleanUndefined(book));
-      }
-      // Sync Progress
-      for (const p of readingProgress) {
-        await setDoc(doc(db, 'progress', p.id), cleanUndefined(p));
-      }
-      // Sync Goals
-      for (const g of goals) {
-        await setDoc(doc(db, 'goals', `${g.userId}_${g.year}`), cleanUndefined(g));
-      }
-      // Sync Posts
-      for (const post of posts) {
-        await setDoc(doc(db, 'posts', post.id), cleanUndefined(post));
-      }
-    } catch (e) {
-      console.error("Gagal sinkronisasi data keluar ke Firestore:", e);
-    }
-  };
+    if (!isLoaded || currentUser.id === 'guest' || isDemoMode || !db) return;
+    const timer = setTimeout(() => {
+      void syncDataToFirestore();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [books, readingProgress, posts, goals, stories, shelves, buddyReads, buddyMessages, notifications, currentUser.id, isLoaded]);
 
   // Autentikasi Actions
   const loginWithGoogle = async () => {
@@ -474,12 +574,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       setCurrentUser(loggedUser);
       setIsLoggedIn(true);
-      localStorage.setItem('akra_current_user', JSON.stringify(loggedUser));
+      safeStorageSet('akra_current_user', loggedUser);
     } else {
+      if (!auth) {
+        const msg = firebaseConfigError || 'Firebase Auth belum dikonfigurasi.';
+        setActionError(msg);
+        throw new Error(msg);
+      }
       try {
+        setActionError(null);
         await signInWithGoogleReal();
       } catch (err) {
-        console.error("Gagal Login Google riil:", err);
+        logger.error('auth.google_signin_failed', { error: err });
+        setActionError('Gagal masuk dengan Google. Silakan coba lagi.');
+        throw err;
       }
     }
   };
@@ -488,17 +596,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (isDemoMode) {
       setCurrentUser(GUEST_USER);
       setIsLoggedIn(false);
-      localStorage.removeItem('akra_current_user');
+      safeStorageRemove('akra_current_user');
       setViewedUser(null);
       setReadingProgress([]);
       setPosts([]);
       setGoals([]);
-    } else {
+    } else if (auth) {
       try {
         await signOut(auth);
       } catch (err) {
-        console.error("Gagal Logout riil:", err);
+        logger.error('auth.google_signout_failed', { error: err });
+        setActionError('Gagal keluar dari akun. Silakan coba lagi.');
       }
+    }
+  };
+
+  const emitNotification = (
+    recipientUserId: string,
+    type: Notification['type'],
+    message: string,
+    extra: { postId?: string; bookTitle?: string } = {}
+  ) => {
+    const draft = createNotificationRecord({
+      recipientUserId,
+      actor: currentUser,
+      type,
+      message,
+      postId: extra.postId,
+      bookTitle: extra.bookTitle,
+      id: createUniqueId('notif'),
+    });
+    if (draft) {
+      setNotifications((prev) => [draft, ...prev]);
     }
   };
 
@@ -506,57 +635,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateProgress = (bookId: string, page: number, status: ReadingProgress['status'], rating?: number, note?: string) => {
     if (currentUser.id === 'guest') return;
 
-    let finalStatus = status;
-    let finalPage = page;
+    const { nextProgressList, finalPage, finalStatus, didNewlyComplete } =
+      computeProgressTransition({
+        prevProgress: readingProgress,
+        books,
+        userId: currentUser.id,
+        bookId,
+        page,
+        status,
+        rating,
+        idFactory: () => createUniqueId('p'),
+      });
 
-    setReadingProgress((prev) => {
-      const existingIdx = prev.findIndex((p) => p.userId === currentUser.id && p.bookId === bookId);
-      const book = books.find((b) => b.id === bookId);
-      const limitPage = book ? book.totalPages : page;
-      
-      finalStatus = status === 'COMPLETED' || page >= limitPage ? 'COMPLETED' : status;
-      finalPage = finalStatus === 'COMPLETED' ? limitPage : Math.max(0, Math.min(page, limitPage));
+    setReadingProgress(nextProgressList);
 
-      let newProgress = [...prev];
-      if (existingIdx > -1) {
-        newProgress[existingIdx] = {
-          ...newProgress[existingIdx],
-          currentPage: finalPage,
-          status: finalStatus,
-          rating: rating !== undefined ? rating : newProgress[existingIdx].rating,
-          updatedAt: new Date().toISOString(),
-        };
-      } else {
-        newProgress.push({
-          id: `p_${Date.now()}`,
-          userId: currentUser.id,
-          bookId,
-          currentPage: finalPage,
-          status: finalStatus,
-          rating,
-          updatedAt: new Date().toISOString(),
-        });
-      }
-
-      // If completed, update goals count
-      if (finalStatus === 'COMPLETED' && (existingIdx === -1 || prev[existingIdx].status !== 'COMPLETED')) {
-        updateGoalCompletedCount(1);
-      }
-
-      return newProgress;
-    });
+    if (didNewlyComplete) {
+      updateGoalCompletedCount(1);
+    }
 
     // Automatically create a post for progress update or completion
     const targetBook = books.find((b) => b.id === bookId);
     if (targetBook) {
-      let displayStatus = finalStatus === 'COMPLETED' 
-        ? `Telah menyelesaikan membaca buku "${targetBook.title}"! 🎉` 
+      let displayStatus = finalStatus === 'COMPLETED'
+        ? `Telah menyelesaikan membaca buku "${targetBook.title}"! 🎉`
         : `Mencapai halaman ${finalPage} dari ${targetBook.totalPages} untuk buku "${targetBook.title}"`;
-      
+
       if (note && note.trim()) {
         displayStatus = `"${note.trim()}" — Catatan progres buku "${targetBook.title}" (Hal ${finalPage}/${targetBook.totalPages})`;
       }
-      
+
       addPost(
         'PROGRESS_UPDATE',
         displayStatus,
@@ -564,6 +671,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         finalPage,
         rating
       );
+
+      // Notify Buddy Read partners on reading progress / completion
+      for (const br of buddyReads) {
+        if (br.bookId === bookId && br.userIds.includes(currentUser.id)) {
+          for (const partnerId of br.userIds) {
+            if (partnerId !== currentUser.id) {
+              emitNotification(
+                partnerId,
+                finalStatus === 'COMPLETED' ? 'COMPLETED' : 'PROGRESS',
+                finalStatus === 'COMPLETED'
+                  ? `menyelesaikan "${targetBook.title}".`
+                  : `membaca hingga halaman ${finalPage} di "${targetBook.title}".`,
+                { bookTitle: targetBook.title }
+              );
+            }
+          }
+        }
+      }
     }
   };
 
@@ -586,7 +711,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const book = books.find((b) => b.id === bookId);
     const newPost: Post = {
-      id: `post_${Date.now()}`,
+      id: createUniqueId('post'),
       userId: currentUser.id,
       userDisplayName: currentUser.displayName,
       userAvatar: currentUser.avatar,
@@ -607,18 +732,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deletePost = async (postId: string) => {
+    const targetPost = posts.find((p) => p.id === postId);
+    if (!canDeletePost(targetPost, currentUser.id)) return;
+
     setPosts((prev) => prev.filter((p) => p.id !== postId));
-    if (!isDemoMode && currentUser.id !== 'guest') {
+    if (!isDemoMode && currentUser.id !== 'guest' && db) {
       try {
         await deleteDoc(doc(db, 'posts', postId));
       } catch (e) {
-        console.error("Gagal menghapus postingan dari Firestore:", e);
+        logger.error('firestore.delete_post_failed', { error: e, postId });
+        setActionError('Gagal menghapus postingan dari server.');
       }
     }
   };
 
   const likePost = (postId: string) => {
     if (currentUser.id === 'guest') return;
+
+    const targetPost = posts.find((p) => p.id === postId);
+    const alreadyLiked = targetPost ? targetPost.likes.includes(currentUser.id) : false;
 
     setPosts((prev) =>
       prev.map((post) => {
@@ -632,14 +764,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return post;
       })
     );
+
+    if (targetPost && !alreadyLiked) {
+      emitNotification(
+        targetPost.userId,
+        'LIKE',
+        targetPost.bookTitle ? `menyukai postingan Anda tentang "${targetPost.bookTitle}".` : 'menyukai postingan Anda.',
+        { postId: targetPost.id, bookTitle: targetPost.bookTitle }
+      );
+    }
   };
 
   const addComment = (postId: string, commentContent: string) => {
     if (currentUser.id === 'guest') return;
     if (!commentContent.trim()) return;
 
+    const targetPost = posts.find((p) => p.id === postId);
     const newComment: Comment = {
-      id: `comment_${Date.now()}`,
+      id: createUniqueId('comment'),
       userId: currentUser.id,
       displayName: currentUser.displayName,
       avatar: currentUser.avatar,
@@ -658,25 +800,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return post;
       })
     );
+
+    if (targetPost) {
+      emitNotification(
+        targetPost.userId,
+        'COMMENT',
+        targetPost.bookTitle ? `mengomentari postingan Anda di "${targetPost.bookTitle}".` : 'mengomentari postingan Anda.',
+        { postId: targetPost.id, bookTitle: targetPost.bookTitle }
+      );
+    }
   };
 
   const setGoal = (targetBooks: number) => {
     if (currentUser.id === 'guest') return;
 
+    const safeTargetBooks = clampGoalTarget(targetBooks);
     const currentYear = new Date().getFullYear();
     setGoals((prev) => {
       const existingIdx = prev.findIndex((g) => g.userId === currentUser.id && g.year === currentYear);
-      let newGoals = [...prev];
+      const newGoals = [...prev];
       if (existingIdx > -1) {
         newGoals[existingIdx] = {
           ...newGoals[existingIdx],
-          targetBooks,
+          targetBooks: safeTargetBooks,
         };
       } else {
         newGoals.push({
           userId: currentUser.id,
           year: currentYear,
-          targetBooks,
+          targetBooks: safeTargetBooks,
           completedBooksCount: 0,
         });
       }
@@ -688,7 +840,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentUser.id === 'guest') return undefined;
 
     const newBook: Book = {
-      id: `b_${Date.now()}`,
+      id: createUniqueId('b'),
       title,
       author,
       coverImage: coverImage || 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=300&q=80',
@@ -702,7 +854,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addStory = (content: string, bookTitle?: string) => {
     if (currentUser.id === 'guest') return;
     const newStory: Story = {
-      id: `story_${Date.now()}`,
+      id: createUniqueId('story'),
       userId: currentUser.id,
       userDisplayName: currentUser.displayName,
       userAvatar: currentUser.avatar,
@@ -728,7 +880,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addShelf = (name: string) => {
     if (currentUser.id === 'guest') return;
     const newShelf: Shelf = {
-      id: `shelf_${Date.now()}`,
+      id: createUniqueId('shelf'),
       userId: currentUser.id,
       name,
       bookIds: []
@@ -762,20 +914,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (exists) return;
 
     const newBuddyRead: BuddyRead = {
-      id: `br_${Date.now()}`,
+      id: createUniqueId('br'),
       userIds: [currentUser.id, buddyUserId],
       bookId,
       createdAt: new Date().toISOString()
     };
 
     setBuddyReads((prev) => [...prev, newBuddyRead]);
+
+    const buddyBook = books.find((b) => b.id === bookId);
+    emitNotification(
+      buddyUserId,
+      'BUDDY_READ',
+      buddyBook
+        ? `mengundang Anda membaca bersama "${buddyBook.title}".`
+        : 'mengundang Anda untuk sesi Buddy Read.',
+      { bookTitle: buddyBook?.title }
+    );
   };
 
   const addBuddyMessage = (buddyReadId: string, content: string) => {
     if (currentUser.id === 'guest' || !content.trim()) return;
     
     const newMessage: BuddyMessage = {
-      id: `bm_${Date.now()}`,
+      id: createUniqueId('bm'),
       buddyReadId,
       userId: currentUser.id,
       userDisplayName: currentUser.displayName,
@@ -785,6 +947,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setBuddyMessages((prev) => [...prev, newMessage]);
+  };
+
+  const markNotificationRead = (notificationId: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === notificationId ? { ...n, isRead: true } : n))
+    );
   };
 
   const markAllNotificationsRead = () => {
@@ -805,7 +973,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setCurrentUser(updatedCurrentUser);
     if (isDemoMode) {
-      localStorage.setItem('akra_current_user', JSON.stringify(updatedCurrentUser));
+      safeStorageSet('akra_current_user', updatedCurrentUser);
     }
 
     // Update target user in users list
@@ -834,12 +1002,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentUser(updatedUser);
 
     if (isDemoMode) {
-      localStorage.setItem('akra_current_user', JSON.stringify(updatedUser));
-    } else {
+      safeStorageSet('akra_current_user', updatedUser);
+    } else if (db) {
+      const firestoreDb = db;
       try {
-        await setDoc(doc(db, 'users', currentUser.id), cleanUndefined(updatedUser));
+        await setDoc(doc(firestoreDb, 'users', currentUser.id), toFirestoreData(updatedUser));
       } catch (e) {
-        console.error("Gagal menyimpan profil ke Firestore:", e);
+        logger.error('firestore.save_profile_failed', { error: e });
+        setActionError('Gagal menyimpan perubahan profil ke server.');
       }
     }
 
@@ -851,14 +1021,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Update posts and comments to reflect new profile info
     setPosts((prev) =>
       prev.map((post) => {
-        let updatedPost = { ...post };
+        const updatedPost = { ...post };
         if (post.userId === currentUser.id) {
           if (updates.displayName) updatedPost.userDisplayName = updates.displayName;
           if (updates.avatar) updatedPost.userAvatar = updates.avatar;
         }
         updatedPost.comments = post.comments.map((comment) => {
           if (comment.userId === currentUser.id) {
-            let updatedComment = { ...comment };
+            const updatedComment = { ...comment };
             if (updates.displayName) updatedComment.displayName = updates.displayName;
             if (updates.avatar) updatedComment.avatar = updates.avatar;
             return updatedComment;
@@ -870,223 +1040,106 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const unreadNotificationCount = useMemo(
+    () => notifications.filter((n) => !n.isRead).length,
+    [notifications]
+  );
+
+  const contextValue = useMemo<AppContextProps>(
+    () => ({
+      currentUser,
+      users,
+      books,
+      readingProgress,
+      posts,
+      goals,
+      isLoggedIn,
+      viewedUser,
+      setViewedUser,
+      currentTab,
+      setCurrentTab,
+      globalSearchQuery,
+      setGlobalSearchQuery,
+      selectedBookSuggestion,
+      setSelectedBookSuggestion,
+      selectedBook,
+      setSelectedBook,
+      previousTab,
+      setPreviousTab,
+      viewBookDetails,
+      loginWithGoogle,
+      logout,
+      updateProgress,
+      addPost,
+      deletePost,
+      likePost,
+      addComment,
+      setGoal,
+      addBook,
+      updateProfile,
+      stories,
+      addStory,
+      savedPostIds,
+      toggleSavePost,
+      isLoaded,
+      shelves,
+      addShelf,
+      assignBookToShelves,
+      buddyReads,
+      buddyMessages,
+      startBuddyRead,
+      addBuddyMessage,
+      notifications,
+      unreadNotificationCount,
+      markNotificationRead,
+      markAllNotificationsRead,
+      followUser,
+      isFollowing,
+      language,
+      setLanguage,
+      actionError,
+      clearActionError,
+      toast,
+      showToast,
+      clearToast,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      currentUser,
+      users,
+      books,
+      readingProgress,
+      posts,
+      goals,
+      isLoggedIn,
+      viewedUser,
+      currentTab,
+      globalSearchQuery,
+      selectedBookSuggestion,
+      selectedBook,
+      previousTab,
+      stories,
+      savedPostIds,
+      isLoaded,
+      shelves,
+      buddyReads,
+      buddyMessages,
+      notifications,
+      unreadNotificationCount,
+      language,
+      actionError,
+      toast,
+    ]
+  );
+
   return (
-    <AppContext.Provider
-      value={{
-        currentUser,
-        users,
-        books,
-        readingProgress,
-        posts,
-        goals,
-        isLoggedIn,
-        viewedUser,
-        setViewedUser,
-        currentTab,
-        setCurrentTab,
-        globalSearchQuery,
-        setGlobalSearchQuery,
-        selectedBookSuggestion,
-        setSelectedBookSuggestion,
-        selectedBook,
-        setSelectedBook,
-        previousTab,
-        setPreviousTab,
-        viewBookDetails,
-        loginWithGoogle,
-        logout,
-        updateProgress,
-        addPost,
-        deletePost,
-        likePost,
-        addComment,
-        setGoal,
-        addBook,
-        updateProfile,
-        stories,
-        addStory,
-        savedPostIds,
-        toggleSavePost,
-        isLoaded,
-        shelves,
-        addShelf,
-        assignBookToShelves,
-        buddyReads,
-        buddyMessages,
-        startBuddyRead,
-        addBuddyMessage,
-        notifications,
-        unreadNotificationCount: notifications.filter(n => !n.isRead).length,
-        markAllNotificationsRead,
-        followUser,
-        isFollowing,
-        language,
-        setLanguage,
-      }}
-    >
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );
 };
 
-export const translations = {
-  id: {
-    // Header & BottomNav
-    searchPlaceholder: "Cari judul buku atau penulis...",
-    home: "Beranda",
-    myBooks: "Perpustakaan Saya",
-    buddyRead: "Baca Bareng",
-    profile: "Profil",
-    myProfile: "Profil Saya",
-    logout: "Keluar",
-    loginWithGoogle: "Masuk dengan Google",
-    searchingBook: "Mencari buku...",
-    newBooks: "Buku Baru",
-    noResults: "Tidak ada hasil yang ditemukan.",
-    viewAllNotif: "Lihat semua aktivitas →",
-    // Feed
-    feedTitle: "Aktivitas Terbaru",
-    recomBookmates: "Rekomendasi dari Bookmates",
-    currReadingWidget: "Sedang Dibaca",
-    noActiveBooks: "Belum ada buku aktif. Silakan pilih buku dari perpustakaan.",
-    viewAll: "Lihat Semua",
-    addBook: "Tambah Buku",
-    noRecommendations: "Belum Ada Rekomendasi",
-    inviteFriends: "Undang atau ikuti teman lain untuk melihat rekomendasi bacaan mereka.",
-    like: "Suka",
-    comment: "Komentar",
-    save: "Simpan",
-    saved: "Tersimpan",
-    delete: "Hapus",
-    rateIt: "Beri rating:",
-    wantToRead: "Ingin Baca",
-    currentlyReading: "Sedang Membaca",
-    read: "Selesai Membaca",
-    writeCommentPlaceholder: "Tulis komentar...",
-    deleteActivityTitle: "Hapus Aktivitas?",
-    deleteActivityConfirm: "Apakah Anda yakin ingin menghapus aktivitas membaca ini? Tindakan ini tidak dapat dibatalkan.",
-    cancel: "Batal",
-    shareQuoteTitle: "Bagikan Kutipan",
-    shareThoughtTitle: "Bagikan Pemikiran",
-    sharePhotoTitle: "Bagikan Foto",
-    postButton: "Posting",
-    selectBookPlaceholder: "Pilih buku terkait...",
-    // Library
-    libraryTitle: "Perpustakaan Saya",
-    libraryDesc: "Kelola koleksi buku Anda dan catat progres membaca harian.",
-    allBooks: "Semua Buku",
-    wantToReadShelf: "Rencana Baca",
-    currentlyReadingShelf: "Sedang dibaca",
-    completedShelf: "Selesai dibaca",
-    pagesOf: "halaman",
-    currentPage: "Halaman saat ini:",
-    // Profile
-    bookshelf: "Rak Buku",
-    updates: "Aktivitas",
-    quotes: "Kutipan",
-    readingGoal: "Target Membaca",
-    completed: "Selesai",
-    booksCompleted: "buku selesai",
-    noActivity: "Belum ada aktivitas.",
-    startActivityDesc: "Update progres buku untuk memulai!",
-    noQuotes: "Belum ada kutipan.",
-    shareQuoteDesc: "Bagikan kutipan favorit dari buku yang kamu baca!",
-    readingStats: "Statistik Membaca",
-    avgRating: "Rating Rata-rata",
-    pagesReadCount: "Halaman",
-    editProfile: "Edit Profil",
-    saveProfile: "Simpan Perubahan",
-    // Details
-    rateThisBook: "Beri nilai untuk buku ini",
-    aboutAuthor: "Tentang Penulis",
-    bookDetailsEditions: "Detail buku & edisi",
-    noPenilaian: "Belum ada penilaian",
-    sedangMembaca: "sedang membaca",
-    inginMembaca: "ingin membaca",
-    selesaiMembaca: "selesai membaca",
-    noAppUsersProgress: "Belum ada pengguna aplikasi yang mencatat progres untuk buku ini.",
-    firstPublished: "Pertama kali diterbitkan",
-    simpan: "Simpan"
-  },
-  en: {
-    // Header & BottomNav
-    searchPlaceholder: "Search book title or author...",
-    home: "Home",
-    myBooks: "My Library",
-    buddyRead: "Buddy Read",
-    profile: "Profile",
-    myProfile: "My Profile",
-    logout: "Log Out",
-    loginWithGoogle: "Sign in with Google",
-    searchingBook: "Searching books...",
-    newBooks: "New Books",
-    noResults: "No results found.",
-    viewAllNotif: "View all activity →",
-    // Feed
-    feedTitle: "Recent Activity",
-    recomBookmates: "Recommendations from Bookmates",
-    currReadingWidget: "Currently Reading",
-    noActiveBooks: "No active books. Please select a book from library.",
-    viewAll: "View All",
-    addBook: "Add Book",
-    noRecommendations: "No Recommendations Yet",
-    inviteFriends: "Invite or follow other friends to see their reading recommendations.",
-    like: "Like",
-    comment: "Comment",
-    save: "Save",
-    saved: "Saved",
-    delete: "Delete",
-    rateIt: "Rate it:",
-    wantToRead: "Want to Read",
-    currentlyReading: "Currently Reading",
-    read: "Read",
-    writeCommentPlaceholder: "Write a comment...",
-    deleteActivityTitle: "Delete Activity?",
-    deleteActivityConfirm: "Are you sure you want to delete this reading activity? This action cannot be undone.",
-    cancel: "Cancel",
-    shareQuoteTitle: "Share Quote",
-    shareThoughtTitle: "Share Thought",
-    sharePhotoTitle: "Share Photo",
-    postButton: "Post",
-    selectBookPlaceholder: "Select related book...",
-    // Library
-    libraryTitle: "My Library",
-    libraryDesc: "Manage your book collection and log daily reading progress.",
-    allBooks: "All Books",
-    wantToReadShelf: "Want to Read",
-    currentlyReadingShelf: "Currently Reading",
-    completedShelf: "Completed",
-    pagesOf: "pages",
-    currentPage: "Current page:",
-    // Profile
-    bookshelf: "Bookshelf",
-    updates: "Updates",
-    quotes: "Quotes",
-    readingGoal: "Reading Goal",
-    completed: "Completed",
-    booksCompleted: "books completed",
-    noActivity: "No activity yet.",
-    startActivityDesc: "Update book progress to start!",
-    noQuotes: "No quotes yet.",
-    shareQuoteDesc: "Share your favorite quote from the book you're reading!",
-    readingStats: "Reading Statistics",
-    avgRating: "Avg Rating",
-    pagesReadCount: "Pages",
-    editProfile: "Edit Profile",
-    saveProfile: "Save Changes",
-    // Details
-    rateThisBook: "Rate this book",
-    aboutAuthor: "About the Author",
-    bookDetailsEditions: "Book details & editions",
-    noPenilaian: "No ratings yet",
-    sedangMembaca: "currently reading",
-    inginMembaca: "want to read",
-    selesaiMembaca: "finished reading",
-    noAppUsersProgress: "No app users have logged progress for this book yet.",
-    firstPublished: "First published",
-    simpan: "Save"
-  }
-};
+export { translations } from '../lib/i18n';
 
 export const useApp = () => {
   const context = useContext(AppContext);

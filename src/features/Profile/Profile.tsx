@@ -3,14 +3,21 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp, translations } from '../../context/AppContext';
 import { Card } from '../../components/Card';
+import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal';
+import { Modal } from '../../components/Modal';
 import { ProgressBar } from '../../components/ProgressBar';
+import { BookCover, UserAvatar } from '../../components/Media';
+import { ProfileActivityTabs } from './ProfileActivityTabs';
 import { 
   BookOpen, CheckCircle, Flame, FileText, ArrowLeft, Trophy, Edit2, Check, 
   Award, Plus, FolderHeart, ChevronDown, ChevronRight, MoreVertical, Trash2,
-  UserPlus, UserCheck, MessageCircle, MapPin, Calendar, Heart, MessageSquare,
+  UserPlus, UserCheck, MessageCircle, MapPin, Calendar, Bookmark,
   Quote, BookMarked, BarChart2
 } from 'lucide-react';
 import type { Book, Shelf, Post } from '../../types';
+import { computePercent } from '../../lib/idAndMath';
+import { isAllowedImageMime, RASTER_IMAGE_ACCEPT } from '../../lib/uploadValidation';
+import { compressImageFileToDataUrl } from '../../lib/storage';
 
 const PRESET_AVATARS = [
   'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80',
@@ -33,6 +40,7 @@ export const Profile: React.FC = () => {
     updateProfile, 
     viewBookDetails, 
     savedPostIds,
+    toggleSavePost,
     shelves,
     addShelf,
     assignBookToShelves,
@@ -42,7 +50,10 @@ export const Profile: React.FC = () => {
     isFollowing,
     users,
     deletePost,
-    language
+    language,
+    showToast,
+    buddyReads,
+    addComment
   } = useApp();
 
   const targetUser = viewedUser || currentUser;
@@ -59,8 +70,8 @@ export const Profile: React.FC = () => {
   const [editAvatar, setEditAvatar] = useState('');
   const [editLocation, setEditLocation] = useState('');
 
-  // Main tab: 'bookshelf' | 'updates' | 'quotes'
-  const [mainTab, setMainTab] = useState<'bookshelf' | 'updates' | 'quotes'>('bookshelf');
+  // Main tab: 'bookshelf' | 'updates' | 'quotes' | 'saved'
+  const [mainTab, setMainTab] = useState<'bookshelf' | 'updates' | 'quotes' | 'saved'>('bookshelf');
   
   // Bookshelf sub-tab
   const [bookshelfSubTab, setBookshelfSubTab] = useState<'reading' | 'want_to_read' | 'read' | 'shelves' | 'stats'>('reading');
@@ -84,16 +95,23 @@ export const Profile: React.FC = () => {
   const [newShelfName, setNewShelfName] = useState('');
   const [expandedShelfId, setExpandedShelfId] = useState<string | null>(null);
   const [deleteConfirmPostId, setDeleteConfirmPostId] = useState<string | null>(null);
+  const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
+  const [profileCommentText, setProfileCommentText] = useState('');
 
-  // Sync goal target
+  // Sync goal target & reset tabs when switching profiles
   useEffect(() => {
-    setNewGoalTarget(userGoal.targetBooks);
+    const timer = setTimeout(() => {
+      setNewGoalTarget(userGoal.targetBooks);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [userGoal.targetBooks, targetUser.id]);
 
-  // Reset to bookshelf tab when switching profiles
   useEffect(() => {
-    setMainTab('bookshelf');
-    setBookshelfSubTab('reading');
+    const timer = setTimeout(() => {
+      setMainTab('bookshelf');
+      setBookshelfSubTab('reading');
+    }, 0);
+    return () => clearTimeout(timer);
   }, [targetUser.id]);
 
   const openEditModal = () => {
@@ -125,10 +143,19 @@ export const Profile: React.FC = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { alert("Ukuran gambar terlalu besar. Maksimal 2MB."); return; }
-    const reader = new FileReader();
-    reader.onloadend = () => { if (typeof reader.result === 'string') setEditAvatar(reader.result); };
-    reader.readAsDataURL(file);
+    if (!isAllowedImageMime(file.type)) {
+      showToast(language === 'id' ? 'Format foto harus JPG, PNG, WebP, atau GIF.' : 'Photo format must be JPG, PNG, WebP, or GIF.', 'error');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      showToast(language === 'id' ? 'Ukuran gambar terlalu besar. Maksimal 2MB.' : 'Image is too large. Maximum 2MB.', 'error');
+      return;
+    }
+    compressImageFileToDataUrl(file, 600, 0.8)
+      .then((dataUrl) => setEditAvatar(dataUrl))
+      .catch(() => {
+        showToast(language === 'id' ? 'Gagal membaca file gambar.' : 'Failed to read image file.', 'error');
+      });
   };
 
   // Filtered data
@@ -138,9 +165,10 @@ export const Profile: React.FC = () => {
   const wantToReadBooks = books.filter((b) => userProgress.some((p) => p.bookId === b.id && p.status === 'WANT_TO_READ'));
   const userPosts = posts.filter(p => p.userId === targetUser.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const userQuotes = userPosts.filter(p => p.type === 'QUOTE');
+  const savedPosts = posts.filter(p => savedPostIds.includes(p.id));
 
   // Stats
-  const completionPercentage = Math.round((completedBooks.length / userGoal.targetBooks) * 100) || 0;
+  const completionPercentage = computePercent(completedBooks.length, userGoal.targetBooks);
   const remainingBooks = Math.max(0, userGoal.targetBooks - completedBooks.length);
 
   // Social counts
@@ -193,17 +221,6 @@ export const Profile: React.FC = () => {
     setActionMenuBookId(null);
   };
 
-  // Relative time helper
-  const relativeTime = (dateStr: string) => {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-    if (mins < 60) return `${mins} menit lalu`;
-    if (hours < 24) return `${hours} jam lalu`;
-    return `${days} hari lalu`;
-  };
-
   // Join date format
   const joinDate = targetUser.joinedAt 
     ? new Date(targetUser.joinedAt).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
@@ -248,14 +265,19 @@ export const Profile: React.FC = () => {
           <div className="flex items-end justify-between -mt-10 mb-3">
             {/* Avatar */}
             <div className="relative">
-              <img
+              <UserAvatar
                 src={targetUser.avatar}
                 alt={targetUser.displayName}
+                width={96}
+                height={96}
+                priority
                 className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-4 border-white shadow-md"
               />
               {isOwnProfile && (
                 <button
+                  type="button"
                   onClick={openEditModal}
+                  aria-label="Edit avatar profil"
                   className="absolute bottom-0 right-0 w-7 h-7 bg-brand-orange rounded-full flex items-center justify-center border-2 border-white shadow-sm cursor-pointer hover:bg-brand-orange-hover transition-colors"
                 >
                   <Edit2 size={12} className="text-white" />
@@ -267,11 +289,11 @@ export const Profile: React.FC = () => {
             <div className="flex gap-5 sm:gap-8 pt-2">
               <div className="flex flex-col items-center">
                 <span className="text-base sm:text-xl font-extrabold text-text-slate-dark leading-none">{totalBooks}</span>
-                <span className="text-[10px] text-text-slate-light font-semibold mt-0.5">Buku</span>
+                <span className="text-[10px] text-text-slate-light font-semibold mt-0.5">{language === 'id' ? 'Buku' : 'Books'}</span>
               </div>
               <div className="flex flex-col items-center">
                 <span className="text-base sm:text-xl font-extrabold text-text-slate-dark leading-none">{friendsCount}</span>
-                <span className="text-[10px] text-text-slate-light font-semibold mt-0.5">Teman</span>
+                <span className="text-[10px] text-text-slate-light font-semibold mt-0.5">{language === 'id' ? 'Teman' : 'Friends'}</span>
               </div>
               <div className="flex flex-col items-center">
                 <span className="text-base sm:text-xl font-extrabold text-text-slate-dark leading-none">{followingCount}</span>
@@ -341,7 +363,26 @@ export const Profile: React.FC = () => {
                 </button>
               )}
 
-              <button className="flex items-center gap-2 py-2 px-5 text-xs font-bold rounded-lg bg-white text-text-slate-dark border border-border-light-gray hover:bg-gray-50 transition-all cursor-pointer">
+              <button
+                type="button"
+                onClick={() => {
+                  const shared = buddyReads.find(
+                    (br) => br.userIds.includes(currentUser.id) && br.userIds.includes(targetUser.id)
+                  );
+                  const sharedBook = shared ? books.find((b) => b.id === shared.bookId) : null;
+                  if (sharedBook) {
+                    viewBookDetails(sharedBook);
+                  } else {
+                    showToast(
+                      language === 'id'
+                        ? `Buka detail buku untuk mengundang ${targetUser.displayName} ke obrolan Buddy Read.`
+                        : `Open a book details page to invite ${targetUser.displayName} to Buddy Read chat.`,
+                      'info'
+                    );
+                  }
+                }}
+                className="flex items-center gap-2 py-2 px-5 text-xs font-bold rounded-lg bg-white text-text-slate-dark border border-border-light-gray hover:bg-gray-50 transition-all cursor-pointer"
+              >
                 <MessageCircle size={14} />
                 Pesan
               </button>
@@ -361,11 +402,12 @@ export const Profile: React.FC = () => {
             {isOwnProfile && (
               isEditingGoal ? (
                 <div className="flex items-center gap-2">
-                  <input type="range" min="1" max="100" value={newGoalTarget} 
+                  <input type="range" min="1" max="100" value={newGoalTarget}
+                    aria-label="Target buku tahunan"
                     onChange={e => setNewGoalTarget(parseInt(e.target.value) || 12)}
                     className="w-20 accent-brand-orange h-1" />
                   <span className="text-[10px] font-bold text-brand-orange">{newGoalTarget}</span>
-                  <button onClick={handleSaveGoal} className="text-[10px] font-bold text-brand-orange bg-transparent border-none cursor-pointer">✓</button>
+                  <button type="button" onClick={handleSaveGoal} aria-label="Simpan target membaca" className="text-[10px] font-bold text-brand-orange bg-transparent border-none cursor-pointer">✓</button>
                 </div>
               ) : (
                 <button onClick={() => { setNewGoalTarget(userGoal.targetBooks); setIsEditingGoal(true); }}
@@ -386,14 +428,17 @@ export const Profile: React.FC = () => {
       <div className="bg-white border border-t-0 border-border-light-gray rounded-b-2xl shadow-xs">
         {/* Tab header */}
         <div className="flex border-b border-border-light-gray">
-          {[
-            { id: 'bookshelf', label: 'Bookshelf', icon: <BookMarked size={14} /> },
-            { id: 'updates', label: 'Updates', icon: <BarChart2 size={14} /> },
-            { id: 'quotes', label: 'Quotes', icon: <Quote size={14} /> },
-          ].map(tab => (
+          {([
+            { id: 'bookshelf' as const, label: 'Bookshelf', icon: <BookMarked size={14} /> },
+            { id: 'updates' as const, label: 'Updates', icon: <BarChart2 size={14} /> },
+            { id: 'quotes' as const, label: 'Quotes', icon: <Quote size={14} /> },
+            ...(isOwnProfile
+              ? [{ id: 'saved' as const, label: translations[language].saved, icon: <Bookmark size={14} /> }]
+              : []),
+          ]).map(tab => (
             <button
               key={tab.id}
-              onClick={() => setMainTab(tab.id as any)}
+              onClick={() => setMainTab(tab.id)}
               className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-bold border-b-2 transition-all cursor-pointer bg-transparent border-l-0 border-r-0 border-t-0 ${
                 mainTab === tab.id 
                   ? 'text-brand-orange border-brand-orange' 
@@ -429,20 +474,26 @@ export const Profile: React.FC = () => {
                 <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
                   {readingBooks.map((book) => {
                     const progress = userProgress.find((p) => p.bookId === book.id);
-                    const percent = Math.round(((progress?.currentPage || 0) / book.totalPages) * 100) || 0;
+                    const percent = computePercent(progress?.currentPage || 0, book.totalPages);
                     return (
-                      <div key={book.id} className="flex flex-col gap-2 min-w-[90px] max-w-[90px] shrink-0 group cursor-pointer"
-                        onClick={() => viewBookDetails(book)}>
-                        <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden border border-border-light-gray shadow-2xs group-hover:shadow-xs transition-all">
-                          <img src={book.coverImage} alt={book.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
-                            <div className="h-full bg-brand-orange" style={{ width: `${percent}%` }} />
+                      <div key={book.id} className="flex flex-col gap-2 min-w-[90px] max-w-[90px] shrink-0 group">
+                        <button
+                          type="button"
+                          onClick={() => viewBookDetails(book)}
+                          aria-label={book.title}
+                          className="text-left bg-transparent border-none p-0 flex flex-col gap-2 w-full cursor-pointer"
+                        >
+                          <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden border border-border-light-gray shadow-2xs group-hover:shadow-xs transition-all">
+                            <BookCover src={book.coverImage} alt={book.title} width={140} height={210} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
+                              <div className="h-full bg-brand-orange" style={{ width: `${percent}%` }} />
+                            </div>
                           </div>
-                        </div>
-                        <p className="text-[10px] font-bold text-text-slate-dark truncate group-hover:text-brand-orange transition-colors leading-tight">{book.title}</p>
+                          <p className="text-[10px] font-bold text-text-slate-dark truncate group-hover:text-brand-orange transition-colors leading-tight w-full">{book.title}</p>
+                        </button>
                         <p className="text-[9px] text-text-slate-light -mt-1">{percent}%</p>
                         {isOwnProfile && (
-                          <button onClick={e => { e.stopPropagation(); handleOpenProgressModal(book); }}
+                          <button type="button" onClick={() => handleOpenProgressModal(book)}
                             className="text-[9px] font-bold text-brand-orange border border-brand-orange/30 bg-brand-orange-glow rounded-full px-2 py-0.5 hover:bg-brand-orange hover:text-white transition-all cursor-pointer text-center">
                             + Progres
                           </button>
@@ -468,26 +519,33 @@ export const Profile: React.FC = () => {
                   {wantToReadBooks.slice(0, 6).map((book) => (
                     <div key={book.id} className="flex flex-col group relative">
                       <div className="relative aspect-[2/3] rounded-md overflow-hidden border border-border-light-gray shadow-2xs group-hover:shadow-xs transition-all">
-                        <img src={book.coverImage} alt={book.title} onClick={() => viewBookDetails(book)}
-                          className="w-full h-full object-cover cursor-pointer group-hover:scale-102 transition-transform duration-200" />
+                        <button
+                          type="button"
+                          onClick={() => viewBookDetails(book)}
+                          aria-label={book.title}
+                          className="w-full h-full p-0 border-none bg-transparent cursor-pointer block"
+                        >
+                          <BookCover src={book.coverImage} alt={book.title} width={120} height={180}
+                            className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-200" />
+                        </button>
                         {isOwnProfile && (
                           <div className="absolute top-1 right-1">
-                            <button onClick={() => setActionMenuBookId(actionMenuBookId === book.id ? null : book.id)}
+                            <button type="button" onClick={() => setActionMenuBookId(actionMenuBookId === book.id ? null : book.id)}
                               className="w-5 h-5 rounded-full bg-white/90 flex items-center justify-center text-text-slate-medium shadow-xs cursor-pointer">
                               <MoreVertical size={10} />
                             </button>
                             {actionMenuBookId === book.id && (
                               <div className="absolute right-0 mt-0.5 w-32 bg-white border border-border-light-gray rounded-lg shadow-md p-1 z-30 animate-fade-in">
-                                <button onClick={() => handleMoveBookStatus(book.id, 'READING')}
+                                <button type="button" onClick={() => handleMoveBookStatus(book.id, 'READING')}
                                   className="text-left w-full bg-transparent border-none text-[10px] font-semibold text-text-slate-medium rounded-md py-1.5 px-2 hover:bg-gray-100 cursor-pointer">📖 Mulai Baca</button>
-                                <button onClick={() => handleMoveBookStatus(book.id, 'COMPLETED')}
+                                <button type="button" onClick={() => handleMoveBookStatus(book.id, 'COMPLETED')}
                                   className="text-left w-full bg-transparent border-none text-[10px] font-semibold text-text-slate-medium rounded-md py-1.5 px-2 hover:bg-gray-100 cursor-pointer">✓ Selesai</button>
                               </div>
                             )}
                           </div>
                         )}
                       </div>
-                      <p className="text-[10px] font-bold text-text-slate-dark mt-1 truncate cursor-pointer hover:text-brand-orange" onClick={() => viewBookDetails(book)}>{book.title}</p>
+                      <button type="button" onClick={() => viewBookDetails(book)} className="text-left bg-transparent border-none p-0 text-[10px] font-bold text-text-slate-dark mt-1 truncate cursor-pointer hover:text-brand-orange">{book.title}</button>
                     </div>
                   ))}
                 </div>
@@ -508,27 +566,34 @@ export const Profile: React.FC = () => {
                   {completedBooks.slice(0, 6).map((book) => (
                     <div key={book.id} className="flex flex-col group relative">
                       <div className="relative aspect-[2/3] rounded-md overflow-hidden border border-border-light-gray shadow-2xs group-hover:shadow-xs transition-all">
-                        <img src={book.coverImage} alt={book.title} onClick={() => viewBookDetails(book)}
-                          className="w-full h-full object-cover cursor-pointer group-hover:scale-102 transition-transform duration-200" />
+                        <button
+                          type="button"
+                          onClick={() => viewBookDetails(book)}
+                          aria-label={book.title}
+                          className="w-full h-full p-0 border-none bg-transparent cursor-pointer block"
+                        >
+                          <BookCover src={book.coverImage} alt={book.title} width={120} height={180}
+                            className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-200" />
+                        </button>
                         <div className="absolute bottom-0 left-0 right-0 h-1 bg-brand-orange" />
                         {isOwnProfile && (
                           <div className="absolute top-1 right-1">
-                            <button onClick={() => setActionMenuBookId(actionMenuBookId === book.id ? null : book.id)}
+                            <button type="button" onClick={() => setActionMenuBookId(actionMenuBookId === book.id ? null : book.id)}
                               className="w-5 h-5 rounded-full bg-white/90 flex items-center justify-center text-text-slate-medium shadow-xs cursor-pointer">
                               <MoreVertical size={10} />
                             </button>
                             {actionMenuBookId === book.id && (
                               <div className="absolute right-0 mt-0.5 w-32 bg-white border border-border-light-gray rounded-lg shadow-md p-1 z-30 animate-fade-in">
-                                <button onClick={() => handleMoveBookStatus(book.id, 'READING')}
+                                <button type="button" onClick={() => handleMoveBookStatus(book.id, 'READING')}
                                   className="text-left w-full bg-transparent border-none text-[10px] font-semibold text-text-slate-medium rounded-md py-1.5 px-2 hover:bg-gray-100 cursor-pointer">📖 Baca Ulang</button>
-                                <button onClick={() => handleMoveBookStatus(book.id, 'WANT_TO_READ')}
+                                <button type="button" onClick={() => handleMoveBookStatus(book.id, 'WANT_TO_READ')}
                                   className="text-left w-full bg-transparent border-none text-[10px] font-semibold text-text-slate-medium rounded-md py-1.5 px-2 hover:bg-gray-100 cursor-pointer">⏳ Ingin Baca</button>
                               </div>
                             )}
                           </div>
                         )}
                       </div>
-                      <p className="text-[10px] font-bold text-text-slate-dark mt-1 truncate cursor-pointer hover:text-brand-orange" onClick={() => viewBookDetails(book)}>{book.title}</p>
+                      <button type="button" onClick={() => viewBookDetails(book)} className="text-left bg-transparent border-none p-0 text-[10px] font-bold text-text-slate-dark mt-1 truncate cursor-pointer hover:text-brand-orange">{book.title}</button>
                       <span className="text-[9px] text-brand-orange font-bold">✓ Selesai</span>
                     </div>
                   ))}
@@ -551,8 +616,12 @@ export const Profile: React.FC = () => {
                       const isExpanded = expandedShelfId === shelf.id;
                       return (
                         <div key={shelf.id} className="border border-border-light-gray rounded-xl overflow-hidden">
-                          <div onClick={() => setExpandedShelfId(isExpanded ? null : shelf.id)}
-                            className="flex justify-between items-center p-3 cursor-pointer hover:bg-gray-50 transition-colors">
+                          <button
+                            type="button"
+                            aria-expanded={isExpanded}
+                            onClick={() => setExpandedShelfId(isExpanded ? null : shelf.id)}
+                            className="w-full bg-transparent border-none flex justify-between items-center p-3 cursor-pointer hover:bg-gray-50 transition-colors text-left"
+                          >
                             <div className="flex items-center gap-2">
                               {isExpanded ? <ChevronDown size={14} className="text-brand-orange" /> : <ChevronRight size={14} className="text-brand-orange" />}
                               <span className="text-xs font-bold text-text-slate-dark">{shelf.name}</span>
@@ -560,17 +629,33 @@ export const Profile: React.FC = () => {
                             </div>
                             <div className="flex -space-x-2">
                               {shelfBooks.slice(0, 3).map(b => (
-                                <img key={b.id} src={b.coverImage} alt="" className="w-5 h-7 object-cover rounded-xs border border-white shadow-xs" />
+                                <BookCover key={b.id} src={b.coverImage} alt="" width={20} height={28} className="w-5 h-7 object-cover rounded-xs border border-white shadow-xs" />
                               ))}
                             </div>
-                          </div>
-                          {isExpanded && shelfBooks.length > 0 && (
-                            <div className="p-3 pt-0 border-t border-border-light-gray/60 grid grid-cols-5 sm:grid-cols-6 gap-2 animate-slide-in">
-                              {shelfBooks.map(book => (
-                                <img key={book.id} src={book.coverImage} alt={book.title} onClick={() => viewBookDetails(book)}
-                                  className="w-full aspect-[2/3] object-cover rounded-md border border-border-light-gray cursor-pointer hover:scale-102 transition-transform" />
-                              ))}
-                            </div>
+                          </button>
+                          {isExpanded && (
+                            shelfBooks.length === 0 ? (
+                              <div className="p-4 border-t border-border-light-gray/60 text-center text-xs text-text-slate-medium">
+                                {language === 'id'
+                                  ? 'Rak ini masih kosong. Tambahkan buku lewat Perbarui Progres.'
+                                  : 'This shelf is empty. Add books via Update Progress.'}
+                              </div>
+                            ) : (
+                              <div className="p-3 pt-0 border-t border-border-light-gray/60 grid grid-cols-5 sm:grid-cols-6 gap-2 animate-slide-in">
+                                {shelfBooks.map(book => (
+                                  <button
+                                    key={book.id}
+                                    type="button"
+                                    onClick={() => viewBookDetails(book)}
+                                    aria-label={book.title}
+                                    className="p-0 border-none bg-transparent cursor-pointer rounded-md overflow-hidden"
+                                  >
+                                    <BookCover src={book.coverImage} alt={book.title} width={100} height={150}
+                                      className="w-full aspect-[2/3] object-cover rounded-md border border-border-light-gray hover:scale-102 transition-transform" />
+                                  </button>
+                                ))}
+                              </div>
+                            )
                           )}
                         </div>
                       );
@@ -579,9 +664,10 @@ export const Profile: React.FC = () => {
                   {isOwnProfile && (
                     <form onSubmit={handleCreateShelf} className="flex gap-2 mt-3">
                       <input type="text" value={newShelfName} onChange={e => setNewShelfName(e.target.value)}
+                        aria-label="Nama rak baru"
                         className="input-field flex-1 py-1.5 px-3 text-xs rounded-lg h-8"
                         placeholder="Buat rak baru..." />
-                      <button type="submit" className="btn-primary py-1.5 px-3 text-xs rounded-lg h-8 shrink-0">
+                      <button type="submit" aria-label="Tambah rak baru" className="btn-primary py-1.5 px-3 text-xs rounded-lg h-8 shrink-0">
                         <Plus size={12} />
                       </button>
                     </form>
@@ -594,9 +680,10 @@ export const Profile: React.FC = () => {
                   </h3>
                   <form onSubmit={handleCreateShelf} className="flex gap-2">
                     <input type="text" value={newShelfName} onChange={e => setNewShelfName(e.target.value)}
+                      aria-label="Nama rak kustom pertama"
                       className="input-field flex-1 py-1.5 px-3 text-xs rounded-lg h-8"
                       placeholder="Buat rak kustom pertama Anda..." />
-                    <button type="submit" className="btn-primary py-1.5 px-3 text-xs rounded-lg h-8 shrink-0">
+                    <button type="submit" aria-label="Tambah rak kustom" className="btn-primary py-1.5 px-3 text-xs rounded-lg h-8 shrink-0">
                       <Plus size={12} />
                     </button>
                   </form>
@@ -663,217 +750,73 @@ export const Profile: React.FC = () => {
           </div>
         )}
 
-        {/* ========== TAB: UPDATES ========== */}
-        {mainTab === 'updates' && (
-          <div className="p-4 flex flex-col gap-4">
-            {userPosts.length === 0 ? (
-              <div className="text-center py-16 text-text-slate-light">
-                <BookOpen size={32} className="mx-auto mb-3 opacity-30" />
-                <p className="text-sm font-semibold">{translations[language].noActivity}</p>
-                <p className="text-xs mt-1">{translations[language].startActivityDesc}</p>
-              </div>
-            ) : (
-              userPosts.map(post => {
-                const isLiked = post.likes.includes(currentUser.id);
-                const typeLabel = {
-                  QUOTE: { icon: '💬', label: language === 'id' ? 'Kutipan' : 'Quote' },
-                  THOUGHT: { icon: '💭', label: language === 'id' ? 'Pemikiran' : 'Thought' },
-                  PROGRESS_UPDATE: { icon: '📖', label: language === 'id' ? 'Update Baca' : 'Reading Update' },
-                  PHOTO: { icon: '📷', label: language === 'id' ? 'Foto' : 'Photo' }
-                }[post.type];
-
-                return (
-                  <div key={post.id} className="border border-border-light-gray rounded-xl p-4 bg-white hover:border-slate-200 hover:shadow-xs transition-all">
-                    {/* Post Header */}
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-base">{typeLabel.icon}</span>
-                      <span className="text-[10px] font-bold text-text-slate-light uppercase tracking-wide">{typeLabel.label}</span>
-                      {post.bookTitle && (
-                        <>
-                          <span className="text-[10px] text-text-slate-light">·</span>
-                          <span className="text-[10px] font-bold text-brand-orange truncate max-w-[150px]">{post.bookTitle}</span>
-                        </>
-                      )}
-                      <span className="ml-auto text-[10px] text-text-slate-light shrink-0">{relativeTime(post.createdAt)}</span>
-                    </div>
-
-                    {/* Post Content */}
-                    {post.type === 'QUOTE' ? (
-                      <blockquote className="border-l-2 border-brand-orange pl-3 italic text-sm text-text-slate-dark leading-relaxed">
-                        {post.content}
-                      </blockquote>
-                    ) : (
-                      <p className="text-sm text-text-slate-dark leading-relaxed">{post.content}</p>
-                    )}
-
-                    {/* Progress bar for PROGRESS_UPDATE */}
-                    {post.type === 'PROGRESS_UPDATE' && post.currentPage && post.totalPages && (
-                      <div className="mt-3 flex items-center gap-2">
-                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-brand-orange rounded-full" 
-                            style={{ width: `${Math.round((post.currentPage / post.totalPages) * 100)}%` }} />
-                        </div>
-                        <span className="text-[10px] text-text-slate-medium font-bold shrink-0">
-                          {post.currentPage}/{post.totalPages} hal
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Rating */}
-                    {post.rating && post.rating > 0 && (
-                      <div className="flex gap-0.5 mt-2">
-                        {[1,2,3,4,5].map(s => (
-                          <span key={s} className={`text-sm ${s <= post.rating! ? 'text-amber-400' : 'text-gray-200'}`}>★</span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border-light-gray/60">
-                      <button
-                        onClick={() => likePost(post.id)}
-                        className={`flex items-center gap-1.5 text-[11px] font-bold bg-transparent border-none cursor-pointer transition-colors ${isLiked ? 'text-red-500' : 'text-text-slate-light hover:text-red-400'}`}
-                      >
-                        <Heart size={14} fill={isLiked ? 'currentColor' : 'none'} />
-                        {post.likes.length > 0 && <span>{post.likes.length}</span>}
-                        <span>{translations[language].like}</span>
-                      </button>
-                      <button className="flex items-center gap-1.5 text-[11px] font-bold text-text-slate-light hover:text-text-slate-medium bg-transparent border-none cursor-pointer transition-colors">
-                        <MessageSquare size={14} />
-                        {post.comments.length > 0 && <span>{post.comments.length}</span>}
-                        <span>{translations[language].comment}</span>
-                      </button>
-                      {post.userId === currentUser.id && (
-                        <button
-                          onClick={() => setDeleteConfirmPostId(post.id)}
-                          className="flex items-center gap-1.5 text-[11px] font-bold text-text-slate-light hover:text-red-500 bg-transparent border-none cursor-pointer transition-colors ml-auto"
-                        >
-                          <Trash2 size={14} />
-                          <span>{translations[language].delete}</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        )}
-
-        {/* ========== TAB: QUOTES ========== */}
-        {mainTab === 'quotes' && (
-          <div className="p-4 flex flex-col gap-4">
-            {userQuotes.length === 0 ? (
-              <div className="text-center py-16 text-text-slate-light">
-                <Quote size={32} className="mx-auto mb-3 opacity-30" />
-                <p className="text-sm font-semibold">{translations[language].noQuotes}</p>
-                <p className="text-xs mt-1">{translations[language].shareQuoteDesc}</p>
-              </div>
-            ) : (
-              userQuotes.map(post => {
-                const isLiked = post.likes.includes(currentUser.id);
-                return (
-                  <div key={post.id} 
-                    className="relative rounded-2xl overflow-hidden border border-amber-100/80 bg-gradient-to-br from-amber-50/60 to-orange-50/30 p-5 hover:shadow-sm transition-all">
-                    {/* Large quote mark */}
-                    <div className="absolute top-3 left-4 text-5xl text-brand-orange/10 font-serif leading-none select-none pointer-events-none">"</div>
-                    
-                    <blockquote className="text-sm text-text-slate-dark leading-relaxed italic font-medium relative z-10 pl-2 pr-2">
-                      {post.content}
-                    </blockquote>
-
-                    {post.bookTitle && (
-                      <div className="mt-3 flex items-center gap-2">
-                        <div className="w-4 h-0.5 bg-brand-orange/40 rounded-full" />
-                        <span className="text-[11px] font-bold text-brand-orange">{post.bookTitle}</span>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-amber-100">
-                      <span className="text-[10px] text-text-slate-light font-semibold">{relativeTime(post.createdAt)}</span>
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => likePost(post.id)}
-                          className={`flex items-center gap-1 text-[11px] font-bold bg-transparent border-none cursor-pointer transition-colors ${isLiked ? 'text-red-500' : 'text-text-slate-light hover:text-red-400'}`}
-                        >
-                          <Heart size={13} fill={isLiked ? 'currentColor' : 'none'} />
-                          {post.likes.length > 0 && <span>{post.likes.length}</span>}
-                        </button>
-                        {post.userId === currentUser.id && (
-                          <button
-                            onClick={() => setDeleteConfirmPostId(post.id)}
-                            className="flex items-center text-text-slate-light hover:text-red-500 bg-transparent border-none cursor-pointer transition-colors"
-                            title="Hapus Kutipan"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+        {/* ========== TAB: UPDATES, QUOTES & SAVED ========== */}
+        {(mainTab === 'updates' || mainTab === 'quotes' || mainTab === 'saved') && (
+          <ProfileActivityTabs
+            mainTab={mainTab}
+            language={language}
+            currentUser={currentUser}
+            userPosts={userPosts}
+            userQuotes={userQuotes}
+            savedPosts={savedPosts}
+            activeCommentPostId={activeCommentPostId}
+            profileCommentText={profileCommentText}
+            setActiveCommentPostId={setActiveCommentPostId}
+            setProfileCommentText={setProfileCommentText}
+            likePost={likePost}
+            toggleSavePost={toggleSavePost}
+            addComment={addComment}
+            setDeleteConfirmPostId={setDeleteConfirmPostId}
+          />
         )}
       </div>
 
       {/* ============ DELETE CONFIRMATION MODAL ============ */}
-      {deleteConfirmPostId && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
-          <Card className="max-w-xs w-full p-6 flex flex-col gap-4 animate-slide-in">
-            <div className="text-center">
-              <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-3 text-lg">
-                ⚠️
-              </div>
-              <h4 className="text-sm font-bold text-text-slate-dark mb-1">Hapus Aktivitas?</h4>
-              <p className="text-xs text-text-slate-medium leading-relaxed">
-                Apakah Anda yakin ingin menghapus aktivitas membaca ini? Tindakan ini tidak dapat dibatalkan.
-              </p>
-            </div>
-            <div className="flex gap-2.5 mt-2">
-              <button
-                type="button"
-                onClick={() => setDeleteConfirmPostId(null)}
-                className="btn-secondary flex-1 py-2 text-xs font-bold rounded-lg border-none cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  deletePost(deleteConfirmPostId);
-                  setDeleteConfirmPostId(null);
-                }}
-                className="bg-red-500 hover:bg-red-600 text-white flex-1 py-2 text-xs font-bold rounded-lg border-none cursor-pointer shadow-sm transition-colors"
-              >
-                Hapus
-              </button>
-            </div>
-          </Card>
-        </div>
-      )}
+      <ConfirmDeleteModal
+        isOpen={Boolean(deleteConfirmPostId)}
+        onClose={() => setDeleteConfirmPostId(null)}
+        onConfirm={() => {
+          if (deleteConfirmPostId) {
+            deletePost(deleteConfirmPostId);
+            setDeleteConfirmPostId(null);
+          }
+        }}
+        title={translations[language].deleteActivityTitle}
+        description={translations[language].deleteActivityConfirm}
+        cancelLabel={translations[language].cancel}
+        confirmLabel={translations[language].delete}
+      />
 
       {/* ============ EDIT PROFILE MODAL ============ */}
-      {isEditing && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in backdrop-blur-xs">
+      <Modal
+        isOpen={isEditing}
+        onClose={() => setIsEditing(false)}
+        ariaLabel="Edit Profil"
+        backdropClassName="bg-black/50 backdrop-blur-xs"
+      >
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-slide-in">
             <div className="flex justify-between items-center px-6 py-4 border-b border-border-light-gray bg-bg-light-gray">
               <h3 className="text-sm font-bold text-text-slate-dark">Edit Profil</h3>
               <button type="button" onClick={() => setIsEditing(false)}
+                aria-label="Tutup modal edit profil"
                 className="text-text-slate-medium hover:text-text-slate-dark bg-transparent border-none text-xl cursor-pointer">&times;</button>
             </div>
 
             <form onSubmit={handleSave} className="p-6 flex flex-col gap-4 overflow-y-auto max-h-[85vh]">
               {/* Avatar */}
               <div className="flex flex-col items-center gap-2 pb-4 border-b border-border-light-gray">
-                <div className="relative group cursor-pointer w-16 h-16" onClick={() => fileInputRef.current?.click()}>
-                  <img src={editAvatar} alt="Preview" className="w-16 h-16 rounded-full object-cover border-2 border-brand-orange shadow-md group-hover:opacity-85 transition-opacity" />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  aria-label="Ubah foto profil"
+                  className="relative group cursor-pointer w-16 h-16 p-0 border-none bg-transparent rounded-full"
+                >
+                  <UserAvatar src={editAvatar} alt="Preview" width={64} height={64} className="w-16 h-16 rounded-full object-cover border-2 border-brand-orange shadow-md group-hover:opacity-85 transition-opacity" />
                   <div className="absolute inset-0 bg-black/45 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <span className="text-white text-[9px] font-bold">Ubah</span>
                   </div>
-                </div>
-                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+                </button>
+                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept={RASTER_IMAGE_ACCEPT} aria-label="Unggah foto profil" className="hidden" />
                 <button type="button" onClick={() => fileInputRef.current?.click()}
                   className="bg-transparent border-none text-xs font-bold text-brand-orange cursor-pointer hover:text-brand-orange-hover">
                   Unggah Gambar Baru
@@ -882,8 +825,15 @@ export const Profile: React.FC = () => {
                   <span className="text-[10px] text-text-slate-medium font-semibold">Preset:</span>
                   <div className="flex gap-1.5">
                     {PRESET_AVATARS.map((av, idx) => (
-                      <img key={idx} src={av} alt="" onClick={() => setEditAvatar(av)}
-                        className={`w-6 h-6 rounded-full object-cover cursor-pointer border transition-all ${editAvatar === av ? 'border-brand-orange ring-2 ring-brand-orange/20 scale-105' : 'border-border-light-gray'}`} />
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setEditAvatar(av)}
+                        aria-label={`Pilih avatar preset ${idx + 1}`}
+                        className="p-0 border-none bg-transparent rounded-full cursor-pointer"
+                      >
+                        <UserAvatar src={av} alt="" width={24} height={24} className={`w-6 h-6 rounded-full object-cover border transition-all ${editAvatar === av ? 'border-brand-orange ring-2 ring-brand-orange/20 scale-105' : 'border-border-light-gray'}`} />
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -892,30 +842,30 @@ export const Profile: React.FC = () => {
               {/* Fields */}
               <div className="flex flex-col gap-4">
                 {[
-                  { label: 'Nama', value: editName, setter: setEditName, required: true },
-                  { label: 'Username', value: editUsername, setter: setEditUsername, required: true },
-                  { label: 'Lokasi', value: editLocation, setter: setEditLocation },
-                  { label: 'Website', value: editWebsite, setter: setEditWebsite, placeholder: 'https://situs-web.com' },
+                  { id: 'name', label: 'Nama', value: editName, setter: setEditName, required: true },
+                  { id: 'username', label: 'Username', value: editUsername, setter: setEditUsername, required: true },
+                  { id: 'location', label: 'Lokasi', value: editLocation, setter: setEditLocation },
+                  { id: 'website', label: 'Website', value: editWebsite, setter: setEditWebsite, placeholder: 'https://situs-web.com' },
                 ].map(field => (
-                  <div key={field.label} className="grid grid-cols-1 sm:grid-cols-[90px_1fr] items-center gap-2">
-                    <label className="text-xs font-semibold text-text-slate-medium sm:text-right sm:pr-3">{field.label}</label>
-                    <input type="text" value={field.value} required={field.required}
+                  <div key={field.id} className="grid grid-cols-1 sm:grid-cols-[90px_1fr] items-center gap-2">
+                    <label htmlFor={`edit-field-${field.id}`} className="text-xs font-semibold text-text-slate-medium sm:text-right sm:pr-3">{field.label}</label>
+                    <input id={`edit-field-${field.id}`} type="text" value={field.value} required={field.required}
                       onChange={e => field.setter(e.target.value)}
                       placeholder={field.placeholder}
-                      className="input-field w-full px-3 py-2 rounded-md text-xs focus:outline-none" />
+                      className="input-field w-full px-3 py-2 rounded-md text-xs focus-visible:ring-2 focus-visible:ring-brand-orange/40" />
                   </div>
                 ))}
 
                 <div className="grid grid-cols-1 sm:grid-cols-[90px_1fr] items-start gap-2">
-                  <label className="text-xs font-semibold text-text-slate-medium sm:text-right sm:pr-3 pt-2">Bio</label>
-                  <textarea value={editBio} onChange={e => setEditBio(e.target.value)} rows={3}
-                    className="input-field w-full px-3 py-2 rounded-md text-xs focus:outline-none resize-none" />
+                  <label htmlFor="edit-profile-bio" className="text-xs font-semibold text-text-slate-medium sm:text-right sm:pr-3 pt-2">Bio</label>
+                  <textarea id="edit-profile-bio" value={editBio} onChange={e => setEditBio(e.target.value)} rows={3}
+                    className="input-field w-full px-3 py-2 rounded-md text-xs resize-none focus-visible:ring-2 focus-visible:ring-brand-orange/40" />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-[90px_1fr] items-center gap-2">
-                  <label className="text-xs font-semibold text-text-slate-medium sm:text-right sm:pr-3">Gender</label>
-                  <select value={editGender} onChange={e => setEditGender(e.target.value)}
-                    className="input-field w-full px-3 py-2 rounded-md text-xs focus:outline-none">
+                  <label htmlFor="edit-profile-gender" className="text-xs font-semibold text-text-slate-medium sm:text-right sm:pr-3">Gender</label>
+                  <select id="edit-profile-gender" value={editGender} onChange={e => setEditGender(e.target.value)}
+                    className="input-field w-full px-3 py-2 rounded-md text-xs focus-visible:ring-2 focus-visible:ring-brand-orange/40">
                     <option value="Laki-laki">Laki-laki</option>
                     <option value="Perempuan">Perempuan</option>
                     <option value="Pilih tidak menyebutkan">Pilih tidak menyebutkan</option>
@@ -930,26 +880,31 @@ export const Profile: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
-      )}
+      </Modal>
 
       {/* ============ QUICK PROGRESS MODAL ============ */}
-      {activeProgressBook && (() => {
-        const userShelves = shelves.filter(s => s.userId === currentUser.id);
-        return (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in backdrop-blur-xs">
+      <Modal
+        isOpen={Boolean(activeProgressBook)}
+        onClose={() => setActiveProgressBook(null)}
+        ariaLabel={activeProgressBook ? `Perbarui Progres: ${activeProgressBook.title}` : 'Perbarui Progres'}
+        backdropClassName="bg-black/50 backdrop-blur-xs"
+      >
+        {activeProgressBook && (() => {
+          const userShelves = shelves.filter(s => s.userId === currentUser.id);
+          return (
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-slide-in">
               <div className="flex justify-between items-center px-5 py-4 border-b border-border-light-gray bg-bg-light-gray">
                 <h3 className="text-xs font-extrabold text-text-slate-dark truncate max-w-[250px]">
                   Perbarui Progres: {activeProgressBook.title}
                 </h3>
-                <button onClick={() => setActiveProgressBook(null)}
+                <button type="button" onClick={() => setActiveProgressBook(null)}
+                  aria-label="Tutup modal perbarui progres"
                   className="text-text-slate-medium hover:text-text-slate-dark bg-transparent border-none text-lg cursor-pointer">&times;</button>
               </div>
 
               <div className="p-5 flex flex-col gap-4">
                 <div className="flex gap-3 items-center">
-                  <img src={activeProgressBook.coverImage} alt="" className="w-10 h-14 object-cover rounded-md border border-border-light-gray shrink-0 shadow-3xs" />
+                  <BookCover src={activeProgressBook.coverImage} alt="" width={40} height={56} className="w-10 h-14 object-cover rounded-md border border-border-light-gray shrink-0 shadow-xs" />
                   <div className="min-w-0">
                     <h4 className="text-[11px] font-bold text-text-slate-dark truncate">{activeProgressBook.title}</h4>
                     <p className="text-[10px] text-text-slate-medium">{activeProgressBook.author}</p>
@@ -958,25 +913,25 @@ export const Profile: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col gap-2 bg-gray-50/50 border border-border-light-gray/40 rounded-xl p-3">
-                  <label className="text-[10px] font-extrabold text-text-slate-medium uppercase tracking-wider">Halaman Terbaca:</label>
+                  <label htmlFor="quick-progress-range" className="text-[10px] font-extrabold text-text-slate-medium uppercase tracking-wider">Halaman Terbaca:</label>
                   <div className="flex gap-3 items-center">
-                    <input type="range" min="0" max={activeProgressBook.totalPages} value={quickProgressPage}
+                    <input id="quick-progress-range" type="range" min="0" max={activeProgressBook.totalPages} value={quickProgressPage}
                       onChange={e => setQuickProgressPage(Math.max(0, Math.min(parseInt(e.target.value) || 0, activeProgressBook.totalPages)))}
                       className="flex-1 accent-brand-orange h-1" />
                     <div className="flex items-center gap-1 shrink-0">
-                      <input type="number" min="0" max={activeProgressBook.totalPages} value={quickProgressPage}
+                      <input type="number" aria-label="Angka halaman terbaca" min="0" max={activeProgressBook.totalPages} value={quickProgressPage}
                         onChange={e => setQuickProgressPage(Math.max(0, Math.min(parseInt(e.target.value) || 0, activeProgressBook.totalPages)))}
-                        className="w-12 text-center text-xs font-bold border border-border-light-gray rounded-md p-1 focus:outline-none focus:border-brand-orange bg-white" />
+                        className="w-12 text-center text-xs font-bold border border-border-light-gray rounded-md p-1 focus-visible:ring-2 focus-visible:ring-brand-orange/40 focus:border-brand-orange bg-white" />
                       <span className="text-[10px] text-text-slate-light font-bold">/ {activeProgressBook.totalPages}</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-extrabold text-text-slate-medium uppercase tracking-wider">Rating (1-5 Bintang):</label>
-                  <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-extrabold text-text-slate-medium uppercase tracking-wider">Rating (1-5 Bintang):</span>
+                  <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Rating buku">
                     {[1,2,3,4,5].map(star => (
-                      <button key={star} type="button" onClick={() => setQuickProgressRating(star)}
+                      <button key={star} type="button" aria-label={`${star} bintang`} onClick={() => setQuickProgressRating(star)}
                         className="bg-transparent border-none p-0 cursor-pointer text-xl hover:scale-110 transition-transform">
                         <span className="font-sans text-brand-orange">{star <= quickProgressRating ? '★' : '☆'}</span>
                       </button>
@@ -989,15 +944,15 @@ export const Profile: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-extrabold text-text-slate-medium uppercase tracking-wider">Catatan / Kutipan (Opsional):</label>
-                  <textarea rows={2} value={quickProgressNote} onChange={e => setQuickProgressNote(e.target.value)}
+                  <label htmlFor="quick-progress-note" className="text-[10px] font-extrabold text-text-slate-medium uppercase tracking-wider">Catatan / Kutipan (Opsional):</label>
+                  <textarea id="quick-progress-note" rows={2} value={quickProgressNote} onChange={e => setQuickProgressNote(e.target.value)}
                     placeholder="Tulis pemikiran atau kutipan favorit..."
-                    className="input-field w-full px-3 py-2 rounded-lg text-xs focus:outline-none resize-none bg-gray-50" />
+                    className="input-field w-full px-3 py-2 rounded-lg text-xs resize-none bg-gray-50 focus-visible:ring-2 focus-visible:ring-brand-orange/40" />
                 </div>
 
                 {isOwnProfile && userShelves.length > 0 && (
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-extrabold text-text-slate-medium uppercase tracking-wider">Masukkan ke Rak:</label>
+                    <span className="text-[10px] font-extrabold text-text-slate-medium uppercase tracking-wider">Masukkan ke Rak:</span>
                     <div className="flex flex-col gap-1 max-h-24 overflow-y-auto border border-border-light-gray rounded-xl p-2 bg-gray-50">
                       {userShelves.map(shelf => (
                         <label key={shelf.id} className="flex items-center gap-2 px-2 py-1 hover:bg-white rounded-md cursor-pointer text-xs font-medium text-text-slate-medium select-none">
@@ -1016,9 +971,9 @@ export const Profile: React.FC = () => {
                 <button type="button" onClick={handleSaveQuickProgress} className="btn-primary py-1.5 px-4 text-xs font-bold rounded-lg">Simpan Progres</button>
               </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
+      </Modal>
 
     </div>
   );

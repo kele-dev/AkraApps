@@ -3,9 +3,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Bell, MessageSquare, Users, Search, LogOut, User } from 'lucide-react';
-import { LOCAL_BOOK_DATABASE } from '../features/Books/Books';
 import { AnimatedBook } from './AnimatedBook';
-import { searchBooksHybrid } from '../lib/bookApi';
+import { BookCover, UserAvatar } from './Media';
+import { searchBooksHybrid, type SearchBookResult } from '../lib/bookApi';
+import { formatRelativeTime } from '../lib/dateUtils';
+import { logger } from '../lib/logger';
 
 export const Header: React.FC = () => {
   const { 
@@ -23,10 +25,13 @@ export const Header: React.FC = () => {
     setSelectedBookSuggestion,
     notifications,
     unreadNotificationCount,
+    markNotificationRead,
     markAllNotificationsRead,
     viewBookDetails,
     language,
-    setLanguage
+    setLanguage,
+    buddyReads,
+    showToast
   } = useApp();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -34,7 +39,7 @@ export const Header: React.FC = () => {
 
   // Suggestions state
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [onlineSuggestions, setOnlineSuggestions] = useState<any[]>([]);
+  const [onlineSuggestions, setOnlineSuggestions] = useState<SearchBookResult[]>([]);
   const [isSearchingOnline, setIsSearchingOnline] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -63,38 +68,43 @@ export const Header: React.FC = () => {
   useEffect(() => {
     const trimmedQuery = localSearch.trim();
     if (trimmedQuery.length < 3) {
-      setOnlineSuggestions([]);
-      setIsSearchingOnline(false);
       return;
     }
 
-    setIsSearchingOnline(true);
+    const controller = new AbortController();
     const delayDebounceFn = setTimeout(async () => {
+      setIsSearchingOnline(true);
       try {
-        const results = await searchBooksHybrid(trimmedQuery, 5);
+        const results = await searchBooksHybrid(trimmedQuery, 5, 'all', {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
         
-        // Filter out duplicates (already in books or LOCAL_BOOK_DATABASE)
-        const filteredResults = results.filter((onlineBook: any) => {
+        // Filter out duplicates already in library books
+        const filteredResults = results.filter((onlineBook) => {
           const inMyBooks = books.some(
-            (mb) => mb.title.toLowerCase() === onlineBook.title.toLowerCase() && 
+            (mb) => mb.title.toLowerCase() === onlineBook.title.toLowerCase() &&
                     mb.author.toLowerCase() === onlineBook.author.toLowerCase()
           );
-          const inDbBooks = LOCAL_BOOK_DATABASE.some(
-            (dbb) => dbb.title.toLowerCase() === onlineBook.title.toLowerCase() && 
-                     dbb.author.toLowerCase() === onlineBook.author.toLowerCase()
-          );
-          return !inMyBooks && !inDbBooks;
+          return !inMyBooks;
         });
 
         setOnlineSuggestions(filteredResults);
       } catch (err) {
-        console.warn("Gagal mengambil saran pencarian online:", err);
+        if ((err as { name?: string })?.name !== 'AbortError') {
+          logger.warn('header.online_search_failed', { error: err });
+        }
       } finally {
-        setIsSearchingOnline(false);
+        if (!controller.signal.aborted) {
+          setIsSearchingOnline(false);
+        }
       }
     }, 600); // 600ms debounce
 
-    return () => clearTimeout(delayDebounceFn);
+    return () => {
+      clearTimeout(delayDebounceFn);
+      controller.abort();
+    };
   }, [localSearch, books]);
 
   const query = localSearch.trim().toLowerCase();
@@ -102,13 +112,6 @@ export const Header: React.FC = () => {
   // Find matching items
   const matchingMyBooks = query 
     ? books.filter(b => b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query))
-    : [];
-
-  const matchingDbBooks = query
-    ? LOCAL_BOOK_DATABASE.filter(b => {
-        const alreadyInLibrary = books.some(myBook => myBook.title.toLowerCase() === b.title.toLowerCase() && myBook.author.toLowerCase() === b.author.toLowerCase());
-        return !alreadyInLibrary && (b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query));
-      })
     : [];
 
   const matchingUsers = query
@@ -119,7 +122,7 @@ export const Header: React.FC = () => {
     ? posts.filter(p => p.content.toLowerCase().includes(query) || (p.bookTitle && p.bookTitle.toLowerCase().includes(query)))
     : [];
 
-  const hasSuggestions = matchingMyBooks.length > 0 || matchingDbBooks.length > 0 || matchingUsers.length > 0 || matchingPosts.length > 0 || onlineSuggestions.length > 0;
+  const hasSuggestions = matchingMyBooks.length > 0 || matchingUsers.length > 0 || matchingPosts.length > 0 || onlineSuggestions.length > 0;
   const showSuggestionsDropdown = showSuggestions && query.length > 0;
 
   const navLinks = [
@@ -135,18 +138,20 @@ export const Header: React.FC = () => {
         {/* Left Section: Logo & Nav Links */}
         <div className="flex items-center gap-7">
           {/* Logo */}
-          <div 
+          <button
+            type="button"
             onClick={() => {
               setCurrentTab('feed');
               setViewedUser(null);
             }}
-            className="flex items-center gap-2 cursor-pointer"
+            aria-label="AKRA Beranda"
+            className="flex items-center gap-2 cursor-pointer bg-transparent border-none p-0"
           >
             <AnimatedBook size="sm" className="transform hover:scale-105 active-pop" />
             <span className="text-xl font-extrabold text-brand-orange tracking-tight select-none">
               akra
             </span>
-          </div>
+          </button>
 
           {/* Navigation Links */}
           <nav className="hidden md:flex gap-4">
@@ -157,7 +162,7 @@ export const Header: React.FC = () => {
                   setCurrentTab(link.id);
                   setViewedUser(null); // Reset profile viewing when switching tabs
                 }}
-                className={`background-transparent border-none text-sm cursor-pointer py-1 px-1 border-b-2 transition-all ${
+                className={`bg-transparent border-none text-sm cursor-pointer py-1 px-1 border-b-2 transition-all ${
                   currentTab === link.id 
                     ? 'text-text-slate-dark font-bold border-brand-orange' 
                     : 'text-text-slate-medium font-medium border-transparent hover:text-text-slate-dark'
@@ -177,11 +182,17 @@ export const Header: React.FC = () => {
           />
           <input
             type="text"
-            className="input-field w-full pl-9 rounded-full h-8.5 text-xs bg-gray-100 border border-transparent py-1.5 focus:outline-none focus:border-brand-orange focus:bg-white transition-all"
+            aria-label={language === 'id' ? "Cari buku, kutipan, atau teman" : "Search books, quotes, or friends"}
+            className="input-field w-full pl-9 rounded-full h-8.5 text-xs bg-gray-100 border border-transparent py-1.5 focus-visible:ring-2 focus-visible:ring-brand-orange/35 focus:border-brand-orange focus:bg-white transition-all"
             placeholder={language === 'id' ? "Cari buku, kutipan, atau teman..." : "Search books, quotes, or friends..."}
             value={localSearch}
             onChange={(e) => {
-              setLocalSearch(e.target.value);
+              const val = e.target.value;
+              setLocalSearch(val);
+              if (val.trim().length < 3) {
+                setOnlineSuggestions([]);
+                setIsSearchingOnline(false);
+              }
               setShowSuggestions(true);
             }}
             onFocus={() => setShowSuggestions(true)}
@@ -206,50 +217,22 @@ export const Header: React.FC = () => {
                     {language === 'id' ? 'Buku Saya' : 'My Books'} ({matchingMyBooks.length})
                   </div>
                   {matchingMyBooks.map(b => (
-                    <div
+                    <button
+                      type="button"
                       key={b.id}
                       onClick={() => {
                         setCurrentTab('books');
                         setLocalSearch('');
                         setShowSuggestions(false);
                       }}
-                      className="p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
+                      className="w-full text-left bg-transparent border-none p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
                     >
-                      <img src={b.coverImage} alt={b.title} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
+                      <BookCover src={b.coverImage} alt={b.title} width={24} height={34} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-text-slate-dark truncate">{b.title}</p>
                         <p className="text-[10px] text-text-slate-medium truncate">{language === 'id' ? 'oleh' : 'by'} {b.author}</p>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Category: Buku Lain (Database) */}
-              {matchingDbBooks.length > 0 && (
-                <div className="p-2">
-                  <div className="text-[10px] font-extrabold text-brand-orange uppercase px-2 py-1 mb-1">
-                    {language === 'id' ? 'Buku Baru (Database)' : 'New Books (Database)'}
-                  </div>
-                  {matchingDbBooks.map(b => (
-                    <div
-                      key={b.id}
-                      onClick={() => {
-                        viewBookDetails(b as any);
-                        setLocalSearch('');
-                        setShowSuggestions(false);
-                      }}
-                      className="p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
-                    >
-                      <img src={b.coverImage} alt={b.title} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-text-slate-dark truncate">{b.title}</p>
-                        <p className="text-[10px] text-text-slate-medium truncate">{language === 'id' ? 'oleh' : 'by'} {b.author}</p>
-                      </div>
-                      <span className="text-[9px] text-brand-orange border border-brand-orange/30 bg-brand-orange-glow px-1.5 py-0.5 rounded-md font-bold shrink-0 transition-all hover:bg-brand-orange hover:text-white">
-                        {language === 'id' ? '+ Tambah' : '+ Add'}
-                      </span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -261,7 +244,8 @@ export const Header: React.FC = () => {
                     {language === 'id' ? 'Teman & Pengguna' : 'Friends & Users'}
                   </div>
                   {matchingUsers.map(u => (
-                    <div
+                    <button
+                      type="button"
                       key={u.id}
                       onClick={() => {
                         setViewedUser(u);
@@ -269,14 +253,14 @@ export const Header: React.FC = () => {
                         setLocalSearch('');
                         setShowSuggestions(false);
                       }}
-                      className="p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
+                      className="w-full text-left bg-transparent border-none p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
                     >
-                      <img src={u.avatar} alt={u.displayName} className="w-6 h-6 rounded-full object-cover border border-border-light-gray shrink-0" />
+                      <UserAvatar src={u.avatar} alt={u.displayName} width={24} height={24} className="w-6 h-6 rounded-full object-cover border border-border-light-gray shrink-0" />
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-text-slate-dark truncate">{u.displayName}</p>
                         <p className="text-[10px] text-text-slate-light truncate">@{u.username}</p>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -288,18 +272,19 @@ export const Header: React.FC = () => {
                     {language === 'id' ? 'Kutipan & Catatan' : 'Quotes & Thoughts'}
                   </div>
                   {matchingPosts.map(p => (
-                    <div
+                    <button
+                      type="button"
                       key={p.id}
                       onClick={() => {
                         setCurrentTab('feed');
                         setLocalSearch('');
                         setShowSuggestions(false);
                       }}
-                      className="p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex flex-col gap-0.5 transition-colors"
+                      className="w-full text-left bg-transparent border-none p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex flex-col gap-0.5 transition-colors"
                     >
-                      <p className="text-text-slate-dark truncate italic font-medium">"{p.content}"</p>
+                      <p className="text-text-slate-dark truncate italic font-medium">&quot;{p.content}&quot;</p>
                       {p.bookTitle && <p className="text-[9px] text-text-slate-medium truncate">{language === 'id' ? 'Buku' : 'Book'}: {p.bookTitle}</p>}
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -317,16 +302,17 @@ export const Header: React.FC = () => {
                       {language === 'id' ? 'Buku Baru' : 'New Books'}
                     </div>
                     {onlineSuggestions.map(b => (
-                      <div
+                      <button
+                        type="button"
                         key={b.id}
                         onClick={() => {
-                          viewBookDetails(b as any);
+                          viewBookDetails(b);
                           setLocalSearch('');
                           setShowSuggestions(false);
                         }}
-                        className="p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
+                        className="w-full text-left bg-transparent border-none p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex items-center gap-2 transition-colors"
                       >
-                        <img src={b.coverImage} alt={b.title} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
+                        <BookCover src={b.coverImage} alt={b.title} width={24} height={34} className="w-6 h-8.5 object-cover rounded-xs border border-border-light-gray shrink-0 shadow-xs" />
                         <div className="min-w-0 flex-1">
                           <p className="font-bold text-text-slate-dark truncate">{b.title}</p>
                           <p className="text-[10px] text-text-slate-medium truncate">{language === 'id' ? 'oleh' : 'by'} {b.author}</p>
@@ -334,7 +320,7 @@ export const Header: React.FC = () => {
                         <span className="text-[9px] text-brand-orange border border-brand-orange/30 bg-brand-orange-glow px-1.5 py-0.5 rounded-md font-bold shrink-0 transition-all hover:bg-brand-orange hover:text-white">
                           {language === 'id' ? '+ Tambah' : '+ Add'}
                         </span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )
@@ -356,7 +342,7 @@ export const Header: React.FC = () => {
                     className="w-full py-2 px-3 bg-brand-orange/10 hover:bg-brand-orange/20 text-brand-orange text-[11px] font-bold rounded-md border-none cursor-pointer text-center transition-all flex items-center justify-center gap-1.5"
                   >
                     <Search size={12} />
-                    {language === 'id' ? 'Cari online' : 'Search online'} "{localSearch}"
+                    {language === 'id' ? 'Cari online' : 'Search online'} &quot;{localSearch}&quot;
                   </button>
                 </div>
               )}
@@ -371,6 +357,9 @@ export const Header: React.FC = () => {
               {/* Notification Bell */}
               <div className="relative" ref={notificationRef}>
                 <button 
+                  type="button"
+                  aria-label={language === 'id' ? 'Notifikasi' : 'Notifications'}
+                  aria-expanded={showNotifications}
                   onClick={() => {
                     setShowNotifications(!showNotifications);
                     setShowDropdown(false);
@@ -390,13 +379,13 @@ export const Header: React.FC = () => {
                   <div className="absolute right-0 mt-2.5 w-80 bg-white border border-border-light-gray rounded-xl shadow-lg z-50 overflow-hidden animate-fade-in">
                     {/* Panel Header */}
                     <div className="flex justify-between items-center px-4 py-3 border-b border-border-light-gray bg-bg-light-gray">
-                      <h4 className="text-xs font-extrabold text-text-slate-dark">Notifikasi</h4>
+                      <h4 className="text-xs font-extrabold text-text-slate-dark">{language === 'id' ? 'Notifikasi' : 'Notifications'}</h4>
                       {unreadNotificationCount > 0 && (
                         <button
                           onClick={() => markAllNotificationsRead()}
                           className="text-[10px] font-bold text-brand-orange hover:text-brand-orange-hover bg-transparent border-none cursor-pointer"
                         >
-                          Tandai semua dibaca
+                          {language === 'id' ? 'Tandai semua dibaca' : 'Mark all read'}
                         </button>
                       )}
                     </div>
@@ -404,7 +393,9 @@ export const Header: React.FC = () => {
                     {/* Notification List */}
                     <div className="flex flex-col max-h-80 overflow-y-auto divide-y divide-border-light-gray/50">
                       {notifications.length === 0 ? (
-                        <p className="text-center text-xs text-text-slate-light py-8 font-medium">Tidak ada notifikasi baru.</p>
+                        <p className="text-center text-xs text-text-slate-light py-8 font-medium">
+                          {language === 'id' ? 'Tidak ada notifikasi baru.' : 'No new notifications.'}
+                        </p>
                       ) : (
                         notifications.slice(0, 8).map((notif) => {
                           const notifIcon = {
@@ -415,28 +406,41 @@ export const Header: React.FC = () => {
                             COMPLETED: '🎉'
                           }[notif.type];
 
-                          const relativeTime = (() => {
-                            const diff = Date.now() - new Date(notif.createdAt).getTime();
-                            const mins = Math.floor(diff / 60000);
-                            const hours = Math.floor(diff / 3600000);
-                            const days = Math.floor(diff / 86400000);
-                            if (mins < 60) return `${mins}m lalu`;
-                            if (hours < 24) return `${hours}j lalu`;
-                            return `${days}h lalu`;
-                          })();
+                          const relativeTime = formatRelativeTime(notif.createdAt, language, new Date(), { compact: true });
 
                           return (
-                            <div
+                            <button
+                              type="button"
                               key={notif.id}
-                              className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${
-                                !notif.isRead ? 'bg-brand-orange/[0.04]' : ''
+                              onClick={() => {
+                                markNotificationRead(notif.id);
+                                setShowNotifications(false);
+                                const linkedPost = notif.postId
+                                  ? posts.find((p) => p.id === notif.postId)
+                                  : undefined;
+                                const targetBook =
+                                  (linkedPost?.bookId && books.find((b) => b.id === linkedPost.bookId)) ||
+                                  (notif.bookTitle &&
+                                    books.find(
+                                      (b) => b.title.toLowerCase() === notif.bookTitle?.toLowerCase()
+                                    ));
+                                if (targetBook) {
+                                  viewBookDetails(targetBook);
+                                } else {
+                                  setCurrentTab('feed');
+                                }
+                              }}
+                              className={`w-full text-left border-none flex items-start gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${
+                                !notif.isRead ? 'bg-brand-orange/[0.04]' : 'bg-transparent'
                               }`}
                             >
                               {/* Avatar */}
                               <div className="relative shrink-0">
-                                <img
+                                <UserAvatar
                                   src={notif.fromUserAvatar}
                                   alt={notif.fromUserDisplayName}
+                                  width={32}
+                                  height={32}
                                   className="w-8 h-8 rounded-full object-cover border border-border-light-gray"
                                 />
                                 <span className="absolute -bottom-0.5 -right-0.5 text-[11px] bg-white rounded-full shadow-xs border border-white">{notifIcon}</span>
@@ -455,7 +459,7 @@ export const Header: React.FC = () => {
                               {!notif.isRead && (
                                 <div className="w-2 h-2 rounded-full bg-brand-orange shrink-0 mt-1" />
                               )}
-                            </div>
+                            </button>
                           );
                         })
                       )}
@@ -470,29 +474,63 @@ export const Header: React.FC = () => {
                         }}
                         className="text-[11px] font-bold text-brand-orange hover:text-brand-orange-hover bg-transparent border-none cursor-pointer"
                       >
-                        Lihat semua aktivitas →
+                        {language === 'id' ? 'Lihat semua aktivitas →' : 'View all activity →'}
                       </button>
                     </div>
                   </div>
                 )}
               </div>
               
-              <button className="hidden sm:flex bg-transparent border-none cursor-pointer text-text-slate-medium p-1.5 rounded-full items-center justify-center hover:bg-gray-100 transition-colors">
+              <button
+                type="button"
+                onClick={() => {
+                  const myBuddy = buddyReads.find((br) => br.userIds.includes(currentUser.id));
+                  const buddyBook = myBuddy ? books.find((b) => b.id === myBuddy.bookId) : null;
+                  if (buddyBook) {
+                    viewBookDetails(buddyBook);
+                  } else {
+                    setCurrentTab('books');
+                    showToast(
+                      language === 'id'
+                        ? 'Pilih buku lalu undang teman untuk mulai chat Buddy Read.'
+                        : 'Select a book and invite a friend to start Buddy Read chat.',
+                      'info'
+                    );
+                  }
+                }}
+                aria-label={language === 'id' ? 'Pesan Buddy Read' : 'Buddy Read Messages'}
+                className="hidden sm:flex bg-transparent border-none cursor-pointer text-text-slate-medium p-1.5 rounded-full items-center justify-center hover:bg-gray-100 transition-colors"
+              >
                 <MessageSquare size={20} className="text-brand-orange" />
               </button>
               
-              <button className="hidden sm:flex bg-transparent border-none cursor-pointer text-text-slate-medium p-1.5 rounded-full items-center justify-center hover:bg-gray-100 transition-colors">
+              <button
+                type="button"
+                onClick={() => setCurrentTab('search')}
+                aria-label={language === 'id' ? 'Temukan Teman & Grup' : 'Find Friends & Groups'}
+                className="hidden sm:flex bg-transparent border-none cursor-pointer text-text-slate-medium p-1.5 rounded-full items-center justify-center hover:bg-gray-100 transition-colors"
+              >
                 <Users size={20} className="text-brand-orange" />
               </button>
 
               {/* User Profile Avatar with Click Dropdown */}
               <div className="relative" ref={dropdownRef}>
-                <img
-                  src={currentUser.avatar}
-                  alt={currentUser.displayName}
+                <button
+                  type="button"
                   onClick={() => setShowDropdown(!showDropdown)}
-                  className="w-8 h-8 rounded-full object-cover cursor-pointer border border-border-light-gray hover:border-brand-orange transition-all"
-                />
+                  aria-label={language === 'id' ? 'Menu Profil' : 'Profile Menu'}
+                  aria-expanded={showDropdown}
+                  className="rounded-full p-0 border-none bg-transparent cursor-pointer flex items-center justify-center"
+                >
+                  <UserAvatar
+                    src={currentUser.avatar}
+                    alt={currentUser.displayName}
+                    width={32}
+                    height={32}
+                    priority
+                    className="w-8 h-8 rounded-full object-cover border border-border-light-gray hover:border-brand-orange transition-all"
+                  />
+                </button>
 
                 {/* Dropdown Menu */}
                 {showDropdown && (
@@ -558,7 +596,7 @@ export const Header: React.FC = () => {
               onClick={loginWithGoogle}
               className="btn-primary flex items-center gap-1.5 text-xs py-1.5 px-4 rounded-full font-bold cursor-pointer"
             >
-              Masuk dengan Google
+              {language === 'id' ? 'Masuk dengan Google' : 'Sign in with Google'}
             </button>
           )}
         </div>

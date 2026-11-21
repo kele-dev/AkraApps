@@ -2,10 +2,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp, translations } from '../../context/AppContext';
-import { Search, Star, ChevronDown, Check, Users, BookOpen, Quote, HelpCircle } from 'lucide-react';
-import { LOCAL_BOOK_DATABASE } from '../Books/Books';
+import { Search, Star, ChevronDown, Check, Users, BookOpen, HelpCircle } from 'lucide-react';
 import { Book } from '../../types';
-import { searchBooksHybrid } from '../../lib/bookApi';
+import { searchBooksHybrid, type SearchBookResult } from '../../lib/bookApi';
+import { filterLocalBooks } from '../../lib/bookSearchUtils';
+import { buildListopiaRankings, buildReadingClubs } from '../../lib/communityDiscovery';
+import { logger } from '../../lib/logger';
+import { BookCover, UserAvatar } from '../../components/Media';
 
 export const SearchPage: React.FC = () => {
   const { 
@@ -15,10 +18,13 @@ export const SearchPage: React.FC = () => {
     addBook, 
     users, 
     posts, 
+    buddyReads,
+    startBuddyRead,
     globalSearchQuery, 
     setGlobalSearchQuery,
     currentUser,
     viewBookDetails,
+    setCurrentTab,
     language
   } = useApp();
 
@@ -28,7 +34,7 @@ export const SearchPage: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'books' | 'groups' | 'quotes' | 'people' | 'listopia'>('books');
 
   // Search execution states
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchBookResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchTime, setSearchTime] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
@@ -56,16 +62,16 @@ export const SearchPage: React.FC = () => {
     };
   }, []);
 
-  // Listen to global searches from Header
-  useEffect(() => {
-    if (globalSearchQuery.trim()) {
-      setSearchQuery(globalSearchQuery);
-      handleSearch(globalSearchQuery);
-      setGlobalSearchQuery('');
-    }
-  }, [globalSearchQuery]);
-
   // Execute Search
+  const triggerLocalFallback = (queryText: string, startTime: number, warningMsg = '') => {
+    setSearchWarning(warningMsg || "Buku tidak ditemukan. Menampilkan hasil koleksi lokal.");
+    const filtered = filterLocalBooks(books, queryText);
+    setSearchResults(filtered);
+    setTotalResults(filtered.length);
+    const endTime = performance.now();
+    setSearchTime(parseFloat(((endTime - startTime) / 1000).toFixed(2)));
+  };
+
   const handleSearch = async (overrideQuery?: string) => {
     const queryToUse = (typeof overrideQuery === 'string' ? overrideQuery : searchQuery).trim();
     if (!queryToUse) return;
@@ -86,27 +92,24 @@ export const SearchPage: React.FC = () => {
         triggerLocalFallback(queryToUse, startTime);
       }
     } catch (e) {
-      console.warn("Pencarian API gagal di Halaman Search, beralih ke lokal:", e);
+      logger.warn('search.api_fallback', { error: e });
       triggerLocalFallback(queryToUse, startTime, "Pencarian API gagal (offline). Menampilkan hasil database lokal.");
     } finally {
       setIsSearching(false);
     }
   };
 
-  const triggerLocalFallback = (queryText: string, startTime: number, warningMsg = '') => {
-    setSearchWarning(warningMsg || "Buku tidak ditemukan. Menampilkan hasil database lokal.");
-    const q = queryText.toLowerCase();
-    
-    // Filter database
-    const filtered = LOCAL_BOOK_DATABASE.filter(
-      (b) => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q)
-    );
-
-    setSearchResults(filtered);
-    setTotalResults(filtered.length);
-    const endTime = performance.now();
-    setSearchTime(parseFloat(((endTime - startTime) / 1000).toFixed(2)));
-  };
+  // Listen to global searches from Header
+  useEffect(() => {
+    if (!globalSearchQuery.trim()) return;
+    const queryCopy = globalSearchQuery;
+    const timer = setTimeout(() => {
+      setSearchQuery(queryCopy);
+      void handleSearch(queryCopy);
+      setGlobalSearchQuery('');
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [globalSearchQuery]);
 
   // Find if a book is in user's library and return status
   const getLibraryStatus = (bookTitle: string, bookAuthor: string) => {
@@ -125,9 +128,9 @@ export const SearchPage: React.FC = () => {
   };
 
   // Add book to library and set shelf
-  const handleAddToShelf = (bookData: any, status: 'WANT_TO_READ' | 'READING' | 'COMPLETED') => {
+  const handleAddToShelf = (bookData: Book | SearchBookResult, status: 'WANT_TO_READ' | 'READING' | 'COMPLETED') => {
     // 1. Check if already in library
-    let existing = books.find(
+    const existing = books.find(
       (b) => b.title.toLowerCase() === bookData.title.toLowerCase() && b.author.toLowerCase() === bookData.author.toLowerCase()
     );
 
@@ -156,7 +159,7 @@ export const SearchPage: React.FC = () => {
   };
 
   // Rate book directly
-  const handleRateBook = (bookData: any, rating: number) => {
+  const handleRateBook = (bookData: Book | SearchBookResult, rating: number) => {
     setUserRatings(prev => ({ ...prev, [bookData.title + bookData.author]: rating }));
     // Automatically add to library as completed/read
     handleAddToShelf(bookData, 'COMPLETED');
@@ -183,12 +186,12 @@ export const SearchPage: React.FC = () => {
   return (
     <div className="flex flex-col gap-6 max-w-[800px] mx-auto animate-fade-in text-text-slate-dark bg-white p-6 rounded-lg border border-border-light-gray shadow-xs">
       {/* Title */}
-      <h2 className="text-2xl font-serif text-[#382110] font-extrabold leading-none pb-2 border-b border-border-light-gray">
-        Search
+      <h2 className="text-2xl font-serif text-brand-espresso font-extrabold leading-none pb-2 border-b border-border-light-gray">
+        {language === 'id' ? 'Pencarian' : 'Search'}
       </h2>
 
       {/* Goodreads Search Container box */}
-      <div className="bg-[#f4f1ea] border border-[#e8e3d6] rounded p-4 flex flex-col gap-3">
+      <div className="bg-surface-parchment border border-border-parchment rounded p-4 flex flex-col gap-3">
         <form 
           onSubmit={(e) => {
             e.preventDefault();
@@ -198,8 +201,9 @@ export const SearchPage: React.FC = () => {
         >
           <input
             type="text"
-            className="input-field flex-1 px-3 py-2 rounded border border-[#d6d0c0] bg-white text-sm focus:outline-none text-text-slate-dark focus:border-brand-orange"
-            placeholder="Cari berdasarkan judul, penulis, atau kata kunci..."
+            aria-label={language === 'id' ? 'Cari berdasarkan judul, penulis, atau kata kunci' : 'Search by title, author, or keyword'}
+            className="input-field flex-1 px-3 py-2 rounded border border-[#d6d0c0] bg-white text-sm text-text-slate-dark focus:border-brand-orange focus-visible:ring-2 focus-visible:ring-brand-orange/40"
+            placeholder={language === 'id' ? 'Cari berdasarkan judul, penulis, atau kata kunci...' : 'Search by title, author, or keyword...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -215,17 +219,17 @@ export const SearchPage: React.FC = () => {
 
         {/* Radio Filter Options */}
         <div className="flex gap-4 items-center text-xs text-text-slate-medium pl-1 select-none">
-          {[
+          {([
             { id: 'all', label: language === 'id' ? 'semua' : 'all' },
             { id: 'title', label: language === 'id' ? 'judul' : 'title' },
             { id: 'author', label: language === 'id' ? 'penulis' : 'author' }
-          ].map((item) => (
+          ] as const).map((item) => (
             <label key={item.id} className="flex items-center gap-1.5 cursor-pointer">
               <input
                 type="radio"
                 name="searchFilter"
                 checked={searchFilter === item.id}
-                onChange={() => setSearchFilter(item.id as any)}
+                onChange={() => setSearchFilter(item.id)}
                 className="accent-brand-orange text-brand-orange"
               />
               <span className={searchFilter === item.id ? "text-text-slate-dark font-semibold" : ""}>
@@ -238,16 +242,16 @@ export const SearchPage: React.FC = () => {
 
       {/* Sub-tabs Navigation */}
       <div className="flex border-b border-border-light-gray overflow-x-auto">
-        {[
+        {([
           { id: 'books', label: language === 'id' ? 'Buku' : 'Books' },
           { id: 'groups', label: language === 'id' ? 'Grup' : 'Groups' },
           { id: 'quotes', label: language === 'id' ? 'Kutipan' : 'Quotes' },
           { id: 'people', label: language === 'id' ? 'Teman' : 'People' },
           { id: 'listopia', label: 'Listopia' }
-        ].map((tab) => (
+        ] as const).map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveSubTab(tab.id as any)}
+            onClick={() => setActiveSubTab(tab.id)}
             className={`px-4 py-2 border-none font-bold text-xs whitespace-nowrap cursor-pointer transition-all border-b-2 ${
               activeSubTab === tab.id
                 ? 'border-[#382110] text-[#382110] font-extrabold'
@@ -310,21 +314,32 @@ export const SearchPage: React.FC = () => {
                   return (
                     <div key={book.id} className="py-4 flex gap-4 items-start first:pt-0">
                       {/* Left: Book Cover */}
-                      <img
-                        src={book.coverImage}
-                        alt={book.title}
+                      <button
+                        type="button"
                         onClick={() => viewBookDetails(book)}
-                        className="w-16 h-22 object-cover rounded shadow-xs border border-border-light-gray shrink-0 bg-gray-50 cursor-pointer hover:opacity-85 transition-opacity"
-                      />
+                        aria-label={book.title}
+                        className="p-0 border-none bg-transparent cursor-pointer shrink-0 rounded"
+                      >
+                        <BookCover
+                          src={book.coverImage}
+                          alt={book.title}
+                          width={64}
+                          height={88}
+                          className="w-16 h-22 object-cover rounded shadow-xs border border-border-light-gray bg-gray-50 hover:opacity-85 transition-opacity"
+                        />
+                      </button>
 
                       {/* Right: Book Details */}
                       <div className="flex-1 min-w-0 flex flex-col gap-1">
                         {/* Title */}
-                        <h4 
-                          onClick={() => viewBookDetails(book)}
-                          className="text-sm font-bold text-text-slate-dark hover:underline cursor-pointer font-serif leading-snug"
-                        >
-                          {book.title}
+                        <h4 className="text-sm font-bold text-text-slate-dark font-serif leading-snug">
+                          <button
+                            type="button"
+                            onClick={() => viewBookDetails(book)}
+                            className="text-left bg-transparent border-none p-0 font-bold text-text-slate-dark hover:underline cursor-pointer font-serif"
+                          >
+                            {book.title}
+                          </button>
                         </h4>
 
                         {/* Author */}
@@ -335,25 +350,25 @@ export const SearchPage: React.FC = () => {
 
                         {/* Ratings statistics */}
                         <div className="flex items-center gap-1 text-[10px] text-text-slate-medium">
-                          {book.ratingsCount > 0 ? (
+                          {(book.ratingsCount ?? 0) > 0 ? (
                             <>
                               <div className="flex text-yellow-500 shrink-0">
                                 {[1, 2, 3, 4, 5].map((s) => (
                                   <Star
                                     key={s}
                                     size={10}
-                                    fill={s <= Math.round(book.rating) ? "currentColor" : "none"}
+                                    fill={s <= Math.round(book.rating ?? 0) ? "currentColor" : "none"}
                                     className="stroke-1"
                                   />
                                 ))}
                               </div>
                               <span>
-                                {book.rating.toFixed(2)} rating rata-rata — {book.ratingsCount.toLocaleString('id-ID')} penilaian — terbit {book.firstPublishYear}
+                                {(book.rating ?? 0).toFixed(2)} rating rata-rata — {(book.ratingsCount ?? 0).toLocaleString('id-ID')} penilaian — terbit {book.firstPublishYear ?? '-'}
                               </span>
                             </>
                           ) : (
                             <span>
-                              Belum ada penilaian — terbit {book.firstPublishYear}
+                              Belum ada penilaian — terbit {book.firstPublishYear ?? '-'}
                             </span>
                           )}
                         </div>
@@ -378,14 +393,15 @@ export const SearchPage: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => handleAddToShelf(book, 'WANT_TO_READ')}
-                                  className="px-3 bg-[#409d69] hover:bg-[#348055] text-white border-none rounded-l cursor-pointer transition-colors shadow-2xs flex items-center justify-center font-bold"
+                                  className="px-3 bg-brand-forest hover:bg-brand-forest-hover text-white border-none rounded-l cursor-pointer transition-colors shadow-2xs flex items-center justify-center font-bold"
                                 >
                                   {translations[language].wantToRead}
                                 </button>
                                 <button
                                   type="button"
+                                  aria-label={language === 'id' ? `Pilih rak untuk ${book.title}` : `Select shelf for ${book.title}`}
                                   onClick={() => setActiveDropdownId(activeDropdownId === book.id ? null : book.id)}
-                                  className="px-1.5 bg-[#409d69] hover:bg-[#348055] text-white border-l border-white/20 rounded-r cursor-pointer transition-colors flex items-center justify-center"
+                                  className="px-1.5 bg-brand-forest hover:bg-brand-forest-hover text-white border-l border-white/20 rounded-r cursor-pointer transition-colors flex items-center justify-center"
                                 >
                                   <ChevronDown size={12} />
                                 </button>
@@ -395,15 +411,15 @@ export const SearchPage: React.FC = () => {
                             {/* Dropdown Options overlay */}
                             {activeDropdownId === book.id && (
                               <div className="absolute left-0 mt-8 w-40 bg-white border border-border-light-gray rounded shadow-md flex flex-col p-1 z-50 animate-fade-in divide-y divide-border-light-gray/50">
-                                {[
+                                {([
                                   { id: 'WANT_TO_READ', label: translations[language].wantToRead },
                                   { id: 'READING', label: translations[language].currentlyReading },
                                   { id: 'COMPLETED', label: translations[language].read }
-                                ].map((option) => (
+                                ] as const).map((option) => (
                                   <button
                                     key={option.id}
                                     type="button"
-                                    onClick={() => handleAddToShelf(book, option.id as any)}
+                                    onClick={() => handleAddToShelf(book, option.id)}
                                     className="w-full text-left px-2 py-1.5 text-[10px] font-semibold text-text-slate-medium hover:bg-gray-100 hover:text-text-slate-dark transition-all border-none bg-transparent cursor-pointer"
                                   >
                                     {option.label}
@@ -416,18 +432,24 @@ export const SearchPage: React.FC = () => {
                           {/* Rate this book stars */}
                           <div className="flex items-center gap-1 text-[10px] text-text-slate-medium select-none ml-1">
                             <span className="shrink-0">{translations[language].rateThisBook}:</span>
-                            <div className="flex text-gray-300">
+                            <div className="flex text-yellow-500" role="radiogroup" aria-label={translations[language].rateThisBook}>
                               {[1, 2, 3, 4, 5].map((star) => (
-                                <Star
+                                <button
                                   key={star}
-                                  size={12}
+                                  type="button"
                                   onClick={() => handleRateBook(book, star)}
-                                  className={`cursor-pointer transition-colors ${
-                                    star <= userRating 
-                                      ? "text-yellow-500 fill-current" 
-                                      : "hover:text-yellow-400"
-                                  }`}
-                                />
+                                  aria-label={`${star} ${language === 'id' ? 'bintang' : 'stars'}`}
+                                  className="bg-transparent border-none p-0.5 cursor-pointer text-gray-300"
+                                >
+                                  <Star
+                                    size={12}
+                                    className={`transition-colors ${
+                                      star <= userRating 
+                                        ? "text-yellow-500 fill-current" 
+                                        : "hover:text-yellow-400"
+                                    }`}
+                                  />
+                                </button>
                               ))}
                             </div>
                           </div>
@@ -460,7 +482,7 @@ export const SearchPage: React.FC = () => {
               <div className="divide-y divide-border-light-gray flex flex-col">
                 {getFilteredPeople().map((user) => (
                   <div key={user.id} className="py-3 flex gap-3 items-center first:pt-0">
-                    <img src={user.avatar} alt={user.displayName} className="w-10 h-10 rounded-full object-cover border border-border-light-gray" />
+                    <UserAvatar src={user.avatar} alt={user.displayName} width={40} height={40} className="w-10 h-10 rounded-full object-cover border border-border-light-gray" />
                     <div className="flex-1 min-w-0">
                       <h4 className="text-xs font-bold text-text-slate-dark">{user.displayName}</h4>
                       <p className="text-[10px] text-text-slate-light">@{user.username}</p>
@@ -485,7 +507,7 @@ export const SearchPage: React.FC = () => {
               <div className="divide-y divide-border-light-gray flex flex-col">
                 {getFilteredQuotes().map((post) => (
                   <div key={post.id} className="py-3 flex flex-col gap-1 first:pt-0">
-                    <p className="text-xs italic text-text-slate-dark font-medium">"{post.content}"</p>
+                    <p className="text-xs italic text-text-slate-dark font-medium">&quot;{post.content}&quot;</p>
                     <p className="text-[10px] text-text-slate-medium">
                       Oleh: <span className="font-bold">{post.userDisplayName}</span>
                       {post.bookTitle && <span> • Buku: <span className="italic">{post.bookTitle}</span></span>}
@@ -501,12 +523,191 @@ export const SearchPage: React.FC = () => {
           </div>
         )}
 
-        {(activeSubTab === 'groups' || activeSubTab === 'listopia') && (
-          <div className="py-16 flex flex-col items-center gap-2 text-text-slate-light border border-border-light-gray bg-bg-light-gray/40 rounded-lg">
-            <Users size={28} className="text-text-slate-light/60" />
-            <span className="text-xs font-semibold text-text-slate-medium">Fitur {activeSubTab === 'groups' ? 'Grup' : 'Listopia'} sedang dikembangkan.</span>
-          </div>
-        )}
+        {activeSubTab === 'groups' && (() => {
+          const clubs = buildReadingClubs(buddyReads, books, users, searchQuery);
+          const otherUsers = users.filter((u) => u.id !== currentUser.id);
+          return (
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between text-xs text-text-slate-medium">
+                <span className="italic">
+                  {language === 'id'
+                    ? `Klub Baca Aktif (${clubs.length} grup)`
+                    : `Active Reading Clubs (${clubs.length} groups)`}
+                </span>
+              </div>
+
+              {clubs.length > 0 ? (
+                <div className="flex flex-col gap-3">
+                  {clubs.map((club) => {
+                    const isMember = club.members.some((m) => m.id === currentUser.id);
+                    const hostId = club.members[0]?.id;
+                    return (
+                      <div
+                        key={club.buddyReadId}
+                        className="border border-border-light-gray rounded-lg p-3.5 flex items-center gap-3.5 bg-white hover:border-brand-orange/40 transition-colors"
+                      >
+                        <BookCover
+                          src={club.book.coverImage}
+                          alt={club.book.title}
+                          width={44}
+                          height={64}
+                          className="w-11 h-16 object-cover rounded border border-border-light-gray shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-sm font-bold text-text-slate-dark truncate">
+                            {club.book.title}
+                          </h4>
+                          <p className="text-[11px] text-text-slate-medium truncate">
+                            {club.book.author} · {club.members.length}{' '}
+                            {language === 'id' ? 'anggota' : 'members'}
+                          </p>
+                          <div className="flex -space-x-1.5 mt-1.5">
+                            {club.members.slice(0, 4).map((m) => (
+                              <UserAvatar
+                                key={m.id}
+                                src={m.avatar}
+                                alt={m.displayName}
+                                width={20}
+                                height={20}
+                                title={m.displayName}
+                                className="w-5 h-5 rounded-full object-cover border border-white"
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!isMember && hostId) {
+                              startBuddyRead(club.book.id, hostId);
+                            }
+                            viewBookDetails(club.book);
+                          }}
+                          className="btn-primary py-1.5 px-3 text-xs shrink-0"
+                        >
+                          {isMember
+                            ? language === 'id'
+                              ? 'Buka Diskusi'
+                              : 'Open Chat'
+                            : language === 'id'
+                              ? 'Gabung Grup'
+                              : 'Join Club'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-12 flex flex-col items-center gap-3 text-center border border-border-light-gray bg-bg-light-gray/40 rounded-lg px-4">
+                  <Users size={28} className="text-text-slate-light/70" />
+                  <p className="text-xs font-semibold text-text-slate-medium max-w-sm">
+                    {language === 'id'
+                      ? 'Belum ada grup Buddy Read yang aktif. Pilih buku dari perpustakaan Anda lalu undang teman untuk mulai klub baca!'
+                      : 'No active Buddy Read clubs yet. Open any book from your library and invite a friend to start a reading club!'}
+                  </p>
+                  {books.length > 0 && otherUsers.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        startBuddyRead(books[0].id, otherUsers[0].id);
+                        viewBookDetails(books[0]);
+                      }}
+                      className="btn-primary py-1.5 px-4 text-xs"
+                    >
+                      {language === 'id'
+                        ? `Mulai Klub untuk "${books[0].title}"`
+                        : `Start Club for "${books[0].title}"`}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentTab('books')}
+                      className="btn-secondary py-1.5 px-4 text-xs"
+                    >
+                      {language === 'id' ? 'Jelajahi Perpustakaan' : 'Browse Library'}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {activeSubTab === 'listopia' && (() => {
+          const rankedBooks = buildListopiaRankings(books, readingProgress, searchQuery);
+          return (
+            <div className="flex flex-col gap-4">
+              <div className="text-xs text-text-slate-medium italic">
+                {language === 'id'
+                  ? `Peringkat Listopia Komunitas (${rankedBooks.length} buku)`
+                  : `Community Listopia Rankings (${rankedBooks.length} books)`}
+              </div>
+
+              {rankedBooks.length > 0 ? (
+                <div className="divide-y divide-border-light-gray flex flex-col">
+                  {rankedBooks.map((entry, idx) => {
+                    const libStatus = getLibraryStatus(entry.book.title, entry.book.author);
+                    return (
+                      <div key={entry.book.id} className="py-3.5 flex gap-3.5 items-center first:pt-0">
+                        <span className="w-7 h-7 rounded-full bg-brand-orange-glow text-brand-orange font-extrabold text-xs flex items-center justify-center shrink-0">
+                          #{idx + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => viewBookDetails(entry.book)}
+                          aria-label={entry.book.title}
+                          className="p-0 border-none bg-transparent cursor-pointer shrink-0 rounded"
+                        >
+                          <BookCover
+                            src={entry.book.coverImage}
+                            alt={entry.book.title}
+                            width={48}
+                            height={68}
+                            className="w-12 h-17 object-cover rounded border border-border-light-gray"
+                          />
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-sm font-bold text-text-slate-dark truncate">
+                            <button
+                              type="button"
+                              onClick={() => viewBookDetails(entry.book)}
+                              className="text-left bg-transparent border-none p-0 font-bold text-text-slate-dark hover:underline cursor-pointer"
+                            >
+                              {entry.book.title}
+                            </button>
+                          </h4>
+                          <p className="text-[11px] text-text-slate-medium truncate">
+                            {entry.book.author}
+                          </p>
+                          <p className="text-[10px] text-text-slate-light mt-0.5">
+                            {entry.ratingsCount > 0
+                              ? `${entry.averageRating.toFixed(2)} ★ (${entry.ratingsCount} rating) · ${entry.readerCount} ${language === 'id' ? 'pembaca' : 'readers'}`
+                              : `${entry.readerCount} ${language === 'id' ? 'pembaca' : 'readers'} · ${language === 'id' ? 'Belum dirating' : 'Unrated'}`}
+                          </p>
+                        </div>
+                        {!libStatus && (
+                          <button
+                            type="button"
+                            onClick={() => handleAddToShelf(entry.book, 'WANT_TO_READ')}
+                            className="px-3 py-1.5 bg-brand-forest hover:bg-brand-forest-hover text-white text-[11px] font-bold rounded border-none cursor-pointer shrink-0"
+                          >
+                            {translations[language].wantToRead}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-12 text-center text-text-slate-light text-xs font-semibold border border-border-light-gray bg-bg-light-gray/40 rounded-lg">
+                  {language === 'id'
+                    ? 'Belum ada buku di daftar Listopia. Tambahkan atau beri rating buku terlebih dahulu.'
+                    : 'No books ranked in Listopia yet. Add or rate books in your library first.'}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
     </div>

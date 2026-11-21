@@ -18,45 +18,16 @@ export interface RichBookDetail {
   authorStats?: string;
   currentlyReadingCount?: number;
   wantToReadCount?: number;
+  isbn13?: string;
+  isbn10?: string;
+  publisher?: string;
+  editionLanguage?: string;
+  characters?: string[];
+  setting?: string;
 }
 
-export const RICH_BOOK_DATABASE: Record<string, Omit<RichBookDetail, 'id' | 'title' | 'author'>> = {};
-
 export const getRichBookDetail = (book: { id: string; title: string; author: string; coverImage: string; totalPages: number; category?: string }): RichBookDetail => {
-  let key = `${book.title.toLowerCase().trim()}_${book.author.toLowerCase().trim()}`;
-
-  // Catch variants of Start with Why
-  if (key.includes("start with why") && key.includes("simon sinek")) {
-    key = "start with why_simon sinek";
-  }
-
-  const localDetail = RICH_BOOK_DATABASE[key];
-
-  if (localDetail) {
-    return {
-      id: book.id,
-      title: book.title,
-      author: book.author,
-      coverImage: (book.coverImage && !book.coverImage.includes('photo-1543002588')) ? book.coverImage : localDetail.coverImage,
-      totalPages: localDetail.totalPages,
-      category: book.category || localDetail.category,
-      rating: localDetail.rating,
-      ratingsCount: localDetail.ratingsCount,
-      reviewsCount: localDetail.reviewsCount,
-      description: localDetail.description,
-      genres: localDetail.genres,
-      publishedDate: localDetail.publishedDate,
-      binding: localDetail.binding,
-      tagline: localDetail.tagline,
-      authorAvatar: localDetail.authorAvatar,
-      authorBio: localDetail.authorBio,
-      authorStats: localDetail.authorStats,
-      currentlyReadingCount: localDetail.currentlyReadingCount,
-      wantToReadCount: localDetail.wantToReadCount
-    };
-  }
-
-  // Procedural generation for details not in local list
+  // Procedural generation for book details fallback
   const titleCharSum = book.title.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
   const authorCharSum = book.author.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
   const seed = titleCharSum + authorCharSum;
@@ -88,7 +59,7 @@ export const getRichBookDetail = (book: { id: string; title: string; author: str
   
   const description = `Buku "${book.title}" merupakan karya luar biasa dari ${book.author} yang membahas tema mendalam seputar ${genres.join(', ')}. Ditulis dengan gaya yang memikat dan alur pemikiran yang runut, buku ini menyajikan wawasan mendalam dan perspektif baru bagi pembacanya.\n\nSebuah bacaan yang sangat direkomendasikan untuk siapa saja yang ingin memperluas cakrawala berpikir dan menemukan inspirasi berharga di setiap halamannya.`;
 
-  const authorAvatar = `https://images.unsplash.com/photo-${1535713875002-d1d0cf377fde}?auto=format&fit=crop&w=150&h=150&q=80`;
+  const authorAvatar = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80';
   const authorBio = `${book.author} adalah seorang penulis profesional yang berfokus pada bidang ${category}. Melalui karya-karyanya, ia berusaha memberikan dampak positif dan berbagi perspektif yang mencerahkan bagi komunitas pembaca di seluruh dunia.`;
   const authorStats = `0 books · 0 followers`;
   
