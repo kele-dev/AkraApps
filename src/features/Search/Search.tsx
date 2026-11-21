@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp, translations } from '../../context/AppContext';
-import { Search, Star, ChevronDown, Check, Users, BookOpen, Quote, HelpCircle } from 'lucide-react';
+import { Search, Star, ChevronDown, Check, Users, BookOpen, HelpCircle } from 'lucide-react';
 import { Book } from '../../types';
 import { searchBooksHybrid, type SearchBookResult } from '../../lib/bookApi';
 import { filterLocalBooks } from '../../lib/bookSearchUtils';
@@ -62,16 +62,16 @@ export const SearchPage: React.FC = () => {
     };
   }, []);
 
-  // Listen to global searches from Header
-  useEffect(() => {
-    if (globalSearchQuery.trim()) {
-      setSearchQuery(globalSearchQuery);
-      handleSearch(globalSearchQuery);
-      setGlobalSearchQuery('');
-    }
-  }, [globalSearchQuery]);
-
   // Execute Search
+  const triggerLocalFallback = (queryText: string, startTime: number, warningMsg = '') => {
+    setSearchWarning(warningMsg || "Buku tidak ditemukan. Menampilkan hasil koleksi lokal.");
+    const filtered = filterLocalBooks(books, queryText);
+    setSearchResults(filtered);
+    setTotalResults(filtered.length);
+    const endTime = performance.now();
+    setSearchTime(parseFloat(((endTime - startTime) / 1000).toFixed(2)));
+  };
+
   const handleSearch = async (overrideQuery?: string) => {
     const queryToUse = (typeof overrideQuery === 'string' ? overrideQuery : searchQuery).trim();
     if (!queryToUse) return;
@@ -99,14 +99,17 @@ export const SearchPage: React.FC = () => {
     }
   };
 
-  const triggerLocalFallback = (queryText: string, startTime: number, warningMsg = '') => {
-    setSearchWarning(warningMsg || "Buku tidak ditemukan. Menampilkan hasil koleksi lokal.");
-    const filtered = filterLocalBooks(books, queryText);
-    setSearchResults(filtered);
-    setTotalResults(filtered.length);
-    const endTime = performance.now();
-    setSearchTime(parseFloat(((endTime - startTime) / 1000).toFixed(2)));
-  };
+  // Listen to global searches from Header
+  useEffect(() => {
+    if (!globalSearchQuery.trim()) return;
+    const queryCopy = globalSearchQuery;
+    const timer = setTimeout(() => {
+      setSearchQuery(queryCopy);
+      void handleSearch(queryCopy);
+      setGlobalSearchQuery('');
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [globalSearchQuery]);
 
   // Find if a book is in user's library and return status
   const getLibraryStatus = (bookTitle: string, bookAuthor: string) => {
@@ -127,7 +130,7 @@ export const SearchPage: React.FC = () => {
   // Add book to library and set shelf
   const handleAddToShelf = (bookData: Book | SearchBookResult, status: 'WANT_TO_READ' | 'READING' | 'COMPLETED') => {
     // 1. Check if already in library
-    let existing = books.find(
+    const existing = books.find(
       (b) => b.title.toLowerCase() === bookData.title.toLowerCase() && b.author.toLowerCase() === bookData.author.toLowerCase()
     );
 
@@ -504,7 +507,7 @@ export const SearchPage: React.FC = () => {
               <div className="divide-y divide-border-light-gray flex flex-col">
                 {getFilteredQuotes().map((post) => (
                   <div key={post.id} className="py-3 flex flex-col gap-1 first:pt-0">
-                    <p className="text-xs italic text-text-slate-dark font-medium">"{post.content}"</p>
+                    <p className="text-xs italic text-text-slate-dark font-medium">&quot;{post.content}&quot;</p>
                     <p className="text-[10px] text-text-slate-medium">
                       Oleh: <span className="font-bold">{post.userDisplayName}</span>
                       {post.bookTitle && <span> • Buku: <span className="italic">{post.bookTitle}</span></span>}

@@ -68,8 +68,6 @@ export const Header: React.FC = () => {
   useEffect(() => {
     const trimmedQuery = localSearch.trim();
     if (trimmedQuery.length < 3) {
-      setOnlineSuggestions([]);
-      setIsSearchingOnline(false);
       return;
     }
 
@@ -189,7 +187,12 @@ export const Header: React.FC = () => {
             placeholder={language === 'id' ? "Cari buku, kutipan, atau teman..." : "Search books, quotes, or friends..."}
             value={localSearch}
             onChange={(e) => {
-              setLocalSearch(e.target.value);
+              const val = e.target.value;
+              setLocalSearch(val);
+              if (val.trim().length < 3) {
+                setOnlineSuggestions([]);
+                setIsSearchingOnline(false);
+              }
               setShowSuggestions(true);
             }}
             onFocus={() => setShowSuggestions(true)}
@@ -279,7 +282,7 @@ export const Header: React.FC = () => {
                       }}
                       className="w-full text-left bg-transparent border-none p-1.5 px-2 hover:bg-bg-light-gray rounded-md cursor-pointer flex flex-col gap-0.5 transition-colors"
                     >
-                      <p className="text-text-slate-dark truncate italic font-medium">"{p.content}"</p>
+                      <p className="text-text-slate-dark truncate italic font-medium">&quot;{p.content}&quot;</p>
                       {p.bookTitle && <p className="text-[9px] text-text-slate-medium truncate">{language === 'id' ? 'Buku' : 'Book'}: {p.bookTitle}</p>}
                     </button>
                   ))}
@@ -339,7 +342,7 @@ export const Header: React.FC = () => {
                     className="w-full py-2 px-3 bg-brand-orange/10 hover:bg-brand-orange/20 text-brand-orange text-[11px] font-bold rounded-md border-none cursor-pointer text-center transition-all flex items-center justify-center gap-1.5"
                   >
                     <Search size={12} />
-                    {language === 'id' ? 'Cari online' : 'Search online'} "{localSearch}"
+                    {language === 'id' ? 'Cari online' : 'Search online'} &quot;{localSearch}&quot;
                   </button>
                 </div>
               )}

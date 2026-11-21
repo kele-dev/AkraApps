@@ -93,26 +93,32 @@ export const Books: React.FC = () => {
   };
 
   useEffect(() => {
-    if (globalSearchQuery.trim()) {
+    if (!globalSearchQuery.trim()) return;
+    const queryCopy = globalSearchQuery;
+    const timer = setTimeout(() => {
       setShowAddForm(true);
-      setSearchQuery(globalSearchQuery);
-      handleApiSearch(globalSearchQuery);
+      setSearchQuery(queryCopy);
+      handleApiSearch(queryCopy);
       setGlobalSearchQuery('');
-    }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [globalSearchQuery]);
 
   useEffect(() => {
-    if (selectedBookSuggestion) {
+    if (!selectedBookSuggestion) return;
+    const suggestion = selectedBookSuggestion;
+    const timer = setTimeout(() => {
       setShowAddForm(true);
-      setTitle(selectedBookSuggestion.title);
-      setAuthor(selectedBookSuggestion.author);
-      setTotalPages(selectedBookSuggestion.totalPages);
-      setCategory(selectedBookSuggestion.category || '');
-      setCoverImage(selectedBookSuggestion.coverImage || '');
+      setTitle(suggestion.title);
+      setAuthor(suggestion.author);
+      setTotalPages(suggestion.totalPages);
+      setCategory(suggestion.category || '');
+      setCoverImage(suggestion.coverImage || '');
       setIsManualInput(false);
       setPagesRead(0);
       setSelectedBookSuggestion(null);
-    }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [selectedBookSuggestion]);
 
   const handleAddBook = (e: React.FormEvent) => {

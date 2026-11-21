@@ -129,14 +129,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Load language preference on load
   useEffect(() => {
-    try {
-      const savedLang = typeof window !== 'undefined' ? localStorage.getItem('akra_language') : null;
-      if (savedLang === 'id' || savedLang === 'en') {
-        setLanguageState(savedLang);
+    const timer = setTimeout(() => {
+      try {
+        const savedLang = typeof window !== 'undefined' ? localStorage.getItem('akra_language') : null;
+        if (savedLang === 'id' || savedLang === 'en') {
+          setLanguageState(savedLang);
+        }
+      } catch {
+        // Ignore storage access failures
       }
-    } catch {
-      // Ignore storage access failures
-    }
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const setLanguage = (lang: 'id' | 'en') => {
@@ -157,6 +160,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedBookSuggestion, setSelectedBookSuggestion] = useState<Book | null>(null);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [previousTab, setPreviousTab] = useState<string>('books');
+
+  // Core App states
+  const [books, setBooks] = useState<Book[]>([]);
+  const [readingProgress, setReadingProgress] = useState<ReadingProgress[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [goals, setGoals] = useState<ReadingGoal[]>([]);
+  const [stories, setStories] = useState<Story[]>([]);
+  const [savedPostIds, setSavedPostIds] = useState<string[]>([]);
+  const [shelves, setShelves] = useState<Shelf[]>([]);
+  const [buddyReads, setBuddyReads] = useState<BuddyRead[]>([]);
+  const [buddyMessages, setBuddyMessages] = useState<BuddyMessage[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const viewBookDetails = (book: Book) => {
     setPreviousTab(currentTab === 'book-details' ? previousTab : currentTab);
@@ -184,126 +199,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       coverImage: 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=300&q=80',
       totalPages: 200,
     };
-    setSelectedBook(sharedBook);
-    setCurrentTab('book-details');
+    const timer = setTimeout(() => {
+      setSelectedBook(sharedBook);
+      setCurrentTab('book-details');
+    }, 0);
+    return () => clearTimeout(timer);
   }, [isLoaded]);
-
-  // Core App states
-  const [books, setBooks] = useState<Book[]>([]);
-  const [readingProgress, setReadingProgress] = useState<ReadingProgress[]>([]);
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [goals, setGoals] = useState<ReadingGoal[]>([]);
-  const [stories, setStories] = useState<Story[]>([]);
-  const [savedPostIds, setSavedPostIds] = useState<string[]>([]);
-  const [shelves, setShelves] = useState<Shelf[]>([]);
-  const [buddyReads, setBuddyReads] = useState<BuddyRead[]>([]);
-  const [buddyMessages, setBuddyMessages] = useState<BuddyMessage[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-
-  // 1. Listen to Real Firebase Auth (if not demo mode)
-  useEffect(() => {
-    if (isDemoMode) {
-      // Load user session from LocalStorage safely
-      const parsed = safeStorageGet<User | null>('akra_current_user', null);
-      if (parsed && typeof parsed === 'object' && parsed.id) {
-        setCurrentUser(parsed);
-        setIsLoggedIn(true);
-      }
-      setIsLoaded(true);
-      return;
-    }
-
-    if (!auth) {
-      setIsLoaded(true);
-      return;
-    }
-
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const loggedUser: User = {
-          id: firebaseUser.uid,
-          username: firebaseUser.email?.split('@')[0] || 'user',
-          displayName: firebaseUser.displayName || 'Google User',
-          avatar: firebaseUser.photoURL || GUEST_USER.avatar,
-          bio: 'Pengguna terverifikasi Google.'
-        };
-        setCurrentUser(loggedUser);
-        setIsLoggedIn(true);
-        await syncDataFromFirestore(firebaseUser.uid, loggedUser);
-      } else {
-        setCurrentUser(GUEST_USER);
-        setIsLoggedIn(false);
-        setReadingProgress([]);
-        setPosts([]);
-        setGoals([]);
-      }
-      setIsLoaded(true);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // 2. Load User Specific LocalStorage Data (Demo Mode & Fallback)
-  useEffect(() => {
-    if (!isLoaded || currentUser.id === 'guest') return;
-
-    if (isDemoMode) {
-      const prefix = `akra_${currentUser.id}_`;
-      const savedBooks = safeStorageGet<Book[]>(`${prefix}books`, []);
-      setBooks(Array.isArray(savedBooks) ? savedBooks : []);
-
-      const savedProgress = safeStorageGet<ReadingProgress[]>(`${prefix}progress`, []);
-      setReadingProgress(
-        Array.isArray(savedProgress)
-          ? savedProgress.filter((p) => !p.userId.startsWith('user_'))
-          : []
-      );
-
-      const savedPosts = safeStorageGet<Post[]>(`${prefix}posts`, []);
-      setPosts(
-        Array.isArray(savedPosts)
-          ? savedPosts.filter(
-              (p) =>
-                !(
-                  p.userId.startsWith('user_') ||
-                  ['Rachel Amanda', 'Dimas Aditya', 'Aditya Wibowo', 'Siti Rahma', 'Budi Santoso'].includes(p.userDisplayName) ||
-                  p.content.includes("Kita tidak bisa mengendalikan hal eksternal") ||
-                  p.content.includes("fiksi bersama")
-                )
-            )
-          : []
-      );
-
-      const savedGoals = safeStorageGet<ReadingGoal[]>(`${prefix}goals`, []);
-      setGoals(
-        Array.isArray(savedGoals)
-          ? savedGoals.filter((g) => !g.userId.startsWith('user_'))
-          : []
-      );
-
-      const savedStories = safeStorageGet<Story[]>(`${prefix}stories`, []);
-      setStories(
-        Array.isArray(savedStories)
-          ? savedStories.filter((s) => !s.userId.startsWith('user_'))
-          : []
-      );
-
-      const savedBookmarks = safeStorageGet<string[]>(`${prefix}saved_bookmarks`, []);
-      setSavedPostIds(Array.isArray(savedBookmarks) ? savedBookmarks : []);
-
-      const savedShelves = safeStorageGet<Shelf[]>(`${prefix}shelves`, []);
-      setShelves(Array.isArray(savedShelves) ? savedShelves : []);
-
-      const savedBuddyReads = safeStorageGet<BuddyRead[]>(`${prefix}buddy_reads`, []);
-      setBuddyReads(Array.isArray(savedBuddyReads) ? savedBuddyReads : []);
-
-      const savedBuddyMessages = safeStorageGet<BuddyMessage[]>(`${prefix}buddy_messages`, []);
-      setBuddyMessages(Array.isArray(savedBuddyMessages) ? savedBuddyMessages : []);
-
-      const savedNotifications = safeStorageGet<Notification[]>(`${prefix}notifications`, []);
-      setNotifications(Array.isArray(savedNotifications) ? savedNotifications : []);
-    }
-  }, [currentUser, isLoaded]);
 
   // 3. Per-slice LocalStorage persistence (avoids re-serializing all 10 keys on unrelated updates)
   useEffect(() => {
@@ -355,15 +256,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!isLoaded || currentUser.id === 'guest') return;
     safeStorageSet(`akra_${currentUser.id}_notifications`, notifications);
   }, [notifications, currentUser.id, isLoaded]);
-
-  // Debounced Firestore batch sync for synced collections
-  useEffect(() => {
-    if (!isLoaded || currentUser.id === 'guest' || isDemoMode || !db) return;
-    const timer = setTimeout(() => {
-      syncDataToFirestore();
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [books, readingProgress, posts, goals, stories, shelves, buddyReads, buddyMessages, notifications, currentUser.id, isLoaded]);
 
   // Sync from Firestore
   const syncDataFromFirestore = async (userId: string, userObj: User) => {
@@ -549,6 +441,125 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       logger.error('firestore.outbound_sync_failed', { error: e });
     }
   };
+
+  // 1. Listen to Real Firebase Auth (if not demo mode)
+  useEffect(() => {
+    if (isDemoMode) {
+      const timer = setTimeout(() => {
+        const parsed = safeStorageGet<User | null>('akra_current_user', null);
+        if (parsed && typeof parsed === 'object' && parsed.id) {
+          setCurrentUser(parsed);
+          setIsLoggedIn(true);
+        }
+        setIsLoaded(true);
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+
+    if (!auth) {
+      const timer = setTimeout(() => {
+        setIsLoaded(true);
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const loggedUser: User = {
+          id: firebaseUser.uid,
+          username: firebaseUser.email?.split('@')[0] || 'user',
+          displayName: firebaseUser.displayName || 'Google User',
+          avatar: firebaseUser.photoURL || GUEST_USER.avatar,
+          bio: 'Pengguna terverifikasi Google.'
+        };
+        setCurrentUser(loggedUser);
+        setIsLoggedIn(true);
+        await syncDataFromFirestore(firebaseUser.uid, loggedUser);
+      } else {
+        setCurrentUser(GUEST_USER);
+        setIsLoggedIn(false);
+        setReadingProgress([]);
+        setPosts([]);
+        setGoals([]);
+      }
+      setIsLoaded(true);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Load User Specific LocalStorage Data (Demo Mode & Fallback)
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest' || !isDemoMode) return;
+
+    const timer = setTimeout(() => {
+      const prefix = `akra_${currentUser.id}_`;
+      const savedBooks = safeStorageGet<Book[]>(`${prefix}books`, []);
+      setBooks(Array.isArray(savedBooks) ? savedBooks : []);
+
+      const savedProgress = safeStorageGet<ReadingProgress[]>(`${prefix}progress`, []);
+      setReadingProgress(
+        Array.isArray(savedProgress)
+          ? savedProgress.filter((p) => !p.userId.startsWith('user_'))
+          : []
+      );
+
+      const savedPosts = safeStorageGet<Post[]>(`${prefix}posts`, []);
+      setPosts(
+        Array.isArray(savedPosts)
+          ? savedPosts.filter(
+              (p) =>
+                !(
+                  p.userId.startsWith('user_') ||
+                  ['Rachel Amanda', 'Dimas Aditya', 'Aditya Wibowo', 'Siti Rahma', 'Budi Santoso'].includes(p.userDisplayName) ||
+                  p.content.includes("Kita tidak bisa mengendalikan hal eksternal") ||
+                  p.content.includes("fiksi bersama")
+                )
+            )
+          : []
+      );
+
+      const savedGoals = safeStorageGet<ReadingGoal[]>(`${prefix}goals`, []);
+      setGoals(
+        Array.isArray(savedGoals)
+          ? savedGoals.filter((g) => !g.userId.startsWith('user_'))
+          : []
+      );
+
+      const savedStories = safeStorageGet<Story[]>(`${prefix}stories`, []);
+      setStories(
+        Array.isArray(savedStories)
+          ? savedStories.filter((s) => !s.userId.startsWith('user_'))
+          : []
+      );
+
+      const savedBookmarks = safeStorageGet<string[]>(`${prefix}saved_bookmarks`, []);
+      setSavedPostIds(Array.isArray(savedBookmarks) ? savedBookmarks : []);
+
+      const savedShelves = safeStorageGet<Shelf[]>(`${prefix}shelves`, []);
+      setShelves(Array.isArray(savedShelves) ? savedShelves : []);
+
+      const savedBuddyReads = safeStorageGet<BuddyRead[]>(`${prefix}buddy_reads`, []);
+      setBuddyReads(Array.isArray(savedBuddyReads) ? savedBuddyReads : []);
+
+      const savedBuddyMessages = safeStorageGet<BuddyMessage[]>(`${prefix}buddy_messages`, []);
+      setBuddyMessages(Array.isArray(savedBuddyMessages) ? savedBuddyMessages : []);
+
+      const savedNotifications = safeStorageGet<Notification[]>(`${prefix}notifications`, []);
+      setNotifications(Array.isArray(savedNotifications) ? savedNotifications : []);
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [currentUser, isLoaded]);
+
+  // Debounced Firestore batch sync for synced collections
+  useEffect(() => {
+    if (!isLoaded || currentUser.id === 'guest' || isDemoMode || !db) return;
+    const timer = setTimeout(() => {
+      void syncDataToFirestore();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [books, readingProgress, posts, goals, stories, shelves, buddyReads, buddyMessages, notifications, currentUser.id, isLoaded]);
 
   // Autentikasi Actions
   const loginWithGoogle = async () => {
@@ -1010,14 +1021,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Update posts and comments to reflect new profile info
     setPosts((prev) =>
       prev.map((post) => {
-        let updatedPost = { ...post };
+        const updatedPost = { ...post };
         if (post.userId === currentUser.id) {
           if (updates.displayName) updatedPost.userDisplayName = updates.displayName;
           if (updates.avatar) updatedPost.userAvatar = updates.avatar;
         }
         updatedPost.comments = post.comments.map((comment) => {
           if (comment.userId === currentUser.id) {
-            let updatedComment = { ...comment };
+            const updatedComment = { ...comment };
             if (updates.displayName) updatedComment.displayName = updates.displayName;
             if (updates.avatar) updatedComment.avatar = updates.avatar;
             return updatedComment;

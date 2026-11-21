@@ -98,15 +98,20 @@ export const Profile: React.FC = () => {
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [profileCommentText, setProfileCommentText] = useState('');
 
-  // Sync goal target
+  // Sync goal target & reset tabs when switching profiles
   useEffect(() => {
-    setNewGoalTarget(userGoal.targetBooks);
+    const timer = setTimeout(() => {
+      setNewGoalTarget(userGoal.targetBooks);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [userGoal.targetBooks, targetUser.id]);
 
-  // Reset to bookshelf tab when switching profiles
   useEffect(() => {
-    setMainTab('bookshelf');
-    setBookshelfSubTab('reading');
+    const timer = setTimeout(() => {
+      setMainTab('bookshelf');
+      setBookshelfSubTab('reading');
+    }, 0);
+    return () => clearTimeout(timer);
   }, [targetUser.id]);
 
   const openEditModal = () => {
