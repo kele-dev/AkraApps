@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, User as FirebaseUser } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider, signInWithPopup, type Auth } from 'firebase/auth';
+import { getFirestore, type Firestore } from 'firebase/firestore';
 import { resolveFirebaseMode } from './firebaseConfig';
 
 const firebaseConfig = {
@@ -19,9 +19,9 @@ const mode = resolveFirebaseMode({
 });
 
 let app;
-let auth: any = null;
-let db: any = null;
-let googleProvider: any = null;
+let auth: Auth | null = null;
+let db: Firestore | null = null;
+let googleProvider: GoogleAuthProvider | null = null;
 let isDemoMode = mode.isDemoMode;
 let firebaseConfigError: string | null = mode.configError;
 

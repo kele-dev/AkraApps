@@ -426,14 +426,14 @@ export const Profile: React.FC = () => {
       <div className="bg-white border border-t-0 border-border-light-gray rounded-b-2xl shadow-xs">
         {/* Tab header */}
         <div className="flex border-b border-border-light-gray">
-          {[
+          {([
             { id: 'bookshelf', label: 'Bookshelf', icon: <BookMarked size={14} /> },
             { id: 'updates', label: 'Updates', icon: <BarChart2 size={14} /> },
             { id: 'quotes', label: 'Quotes', icon: <Quote size={14} /> },
-          ].map(tab => (
+          ] as const).map(tab => (
             <button
               key={tab.id}
-              onClick={() => setMainTab(tab.id as any)}
+              onClick={() => setMainTab(tab.id)}
               className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-bold border-b-2 transition-all cursor-pointer bg-transparent border-l-0 border-r-0 border-t-0 ${
                 mainTab === tab.id 
                   ? 'text-brand-orange border-brand-orange' 

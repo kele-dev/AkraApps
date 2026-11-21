@@ -5,9 +5,10 @@ import { useApp, translations } from '../../context/AppContext';
 import { Card } from '../../components/Card';
 import { ProgressBar } from '../../components/ProgressBar';
 import { Plus, CheckCircle, Clock, ListPlus } from 'lucide-react';
-import { searchBooksHybrid } from '../../lib/bookApi';
+import { searchBooksHybrid, type SearchBookResult } from '../../lib/bookApi';
+import type { Book } from '../../types';
 
-export const LOCAL_BOOK_DATABASE: any[] = [];
+export const LOCAL_BOOK_DATABASE: Book[] = [];
 
 export const Books: React.FC = () => {
   const { 
@@ -35,7 +36,7 @@ export const Books: React.FC = () => {
   const [category, setCategory] = useState('');
   const [coverImage, setCoverImage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchBookResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchWarning, setSearchWarning] = useState('');
   const [pagesRead, setPagesRead] = useState<number>(0);
@@ -80,11 +81,11 @@ export const Books: React.FC = () => {
     }
   };
 
-  const handleSelectSearchResult = (book: any) => {
+  const handleSelectSearchResult = (book: Book | SearchBookResult) => {
     setTitle(book.title);
     setAuthor(book.author);
     setTotalPages(book.totalPages);
-    setCategory(book.category);
+    setCategory(book.category || 'Umum');
     setCoverImage(book.coverImage);
     setSearchResults([]);
     setSearchQuery('');
@@ -325,15 +326,15 @@ export const Books: React.FC = () => {
 
       {/* Shelf Filter Navigation */}
       <div className="flex gap-2 border-b border-border-light-gray pb-2 overflow-x-auto">
-        {[
+        {([
           { id: 'ALL', label: translations[language].allBooks },
           { id: 'READING', label: translations[language].currentlyReadingShelf },
           { id: 'COMPLETED', label: translations[language].completedShelf },
           { id: 'WANT_TO_READ', label: translations[language].wantToReadShelf },
-        ].map((tab) => (
+        ] as const).map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setShelfTab(tab.id as any)}
+            onClick={() => setShelfTab(tab.id)}
             className={`px-4 py-2 border-none font-bold cursor-pointer whitespace-nowrap text-xs rounded-md transition-all border-b-2 ${
               shelfTab === tab.id 
                 ? 'bg-gray-100 text-text-slate-dark border-brand-orange' 

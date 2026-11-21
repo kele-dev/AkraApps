@@ -8,6 +8,7 @@ import { MessageSquare, Bookmark, Quote, BookOpen, Send, Star, ChevronDown, Chec
 import { compressImageFileToDataUrl } from '../../lib/storage';
 import { computePercent } from '../../lib/idAndMath';
 import { isAllowedImageMime, RASTER_IMAGE_ACCEPT } from '../../lib/uploadValidation';
+import type { Book, ReadingProgress, Story, User } from '../../types';
 
 export const Feed: React.FC = () => {
   const { 
@@ -53,7 +54,7 @@ export const Feed: React.FC = () => {
   const [storyBookTitle, setStoryBookTitle] = useState('');
 
   // Group stories by userId (only unique users)
-  const groupedStories = stories.reduce((acc: any[], story) => {
+  const groupedStories = stories.reduce<Story[]>((acc, story) => {
     if (!acc.some(s => s.userId === story.userId)) {
       acc.push(story);
     }
@@ -886,8 +887,14 @@ export const Feed: React.FC = () => {
           </h3>
 
           {(() => {
+            interface FriendRecommendation {
+              book: Book;
+              friend: User;
+              status: ReadingProgress['status'];
+              updatedAt: string;
+            }
             const friendsProgress = readingProgress.filter((p) => p.userId !== currentUser.id && (p.status === 'READING' || p.status === 'COMPLETED'));
-            const friendRecommendations = friendsProgress.reduce((acc: any[], progressItem) => {
+            const friendRecommendations = friendsProgress.reduce<FriendRecommendation[]>((acc, progressItem) => {
               const book = books.find((b) => b.id === progressItem.bookId);
               const friend = users.find((u) => u.id === progressItem.userId);
               if (book && friend && !acc.some(item => item.book.id === book.id)) {

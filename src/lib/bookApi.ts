@@ -6,7 +6,39 @@ export interface SearchBookResult {
   author: string;
   coverImage: string;
   totalPages: number;
-  category: string;
+  category?: string;
+  rating?: number;
+  ratingsCount?: number;
+  firstPublishYear?: number;
+}
+
+interface GoogleBookItem {
+  id?: string;
+  volumeInfo?: {
+    title?: string;
+    authors?: string[];
+    pageCount?: number;
+    categories?: string[];
+    averageRating?: number;
+    ratingsCount?: number;
+    publishedDate?: string;
+    imageLinks?: {
+      thumbnail?: string;
+      smallThumbnail?: string;
+    };
+  };
+}
+
+interface OpenLibraryDoc {
+  key?: string;
+  title?: string;
+  author_name?: string[];
+  cover_i?: number;
+  number_of_pages_median?: number;
+  subject?: string[];
+  ratings_average?: number;
+  ratings_count?: number;
+  first_publish_year?: number;
 }
 
 export interface SearchBooksOptions {
@@ -34,18 +66,22 @@ export const searchBooksHybrid = async (
       const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(googleFilter)}&maxResults=${limit}`;
       const response = await fetchWithTimeout(url, { signal, timeoutMs });
       if (response.ok) {
-        const data = await response.json();
+        const data = (await response.json()) as { items?: GoogleBookItem[] };
         if (data.items) {
-          return data.items.map((item: any) => {
-            const info = item.volumeInfo;
+          return data.items.map((item) => {
+            const info = item.volumeInfo ?? {};
             const cover = info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail || "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=300&q=80";
+            const parsedYear = info.publishedDate ? parseInt(info.publishedDate.slice(0, 4), 10) : undefined;
             return {
               id: item.id || `gb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
               title: info.title || "Judul Tidak Diketahui",
               author: info.authors ? info.authors.join(", ") : "Penulis Tidak Diketahui",
               coverImage: cover,
               totalPages: info.pageCount || 200,
-              category: info.categories ? info.categories[0] : "Umum"
+              category: info.categories ? info.categories[0] : "Umum",
+              rating: typeof info.averageRating === 'number' ? info.averageRating : undefined,
+              ratingsCount: typeof info.ratingsCount === 'number' ? info.ratingsCount : undefined,
+              firstPublishYear: Number.isFinite(parsedYear) ? parsedYear : undefined,
             };
           });
         }
@@ -68,9 +104,9 @@ export const searchBooksHybrid = async (
       const url = `https://openlibrary.org/search.json?${apiFilterParam}=${encodeURIComponent(cleanQuery)}&limit=${limit}`;
       const response = await fetchWithTimeout(url, { signal, timeoutMs });
       if (response.ok) {
-        const data = await response.json();
+        const data = (await response.json()) as { docs?: OpenLibraryDoc[] };
         if (data.docs) {
-          return data.docs.map((doc: any) => {
+          return data.docs.map((doc) => {
             const cover = doc.cover_i 
               ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
               : "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=300&q=80";
@@ -80,7 +116,10 @@ export const searchBooksHybrid = async (
               author: doc.author_name ? doc.author_name.join(", ") : "Penulis Tidak Diketahui",
               coverImage: cover,
               totalPages: doc.number_of_pages_median || 200,
-              category: doc.subject ? doc.subject[0] : "Umum"
+              category: doc.subject ? doc.subject[0] : "Umum",
+              rating: typeof doc.ratings_average === 'number' ? doc.ratings_average : undefined,
+              ratingsCount: typeof doc.ratings_count === 'number' ? doc.ratings_count : undefined,
+              firstPublishYear: typeof doc.first_publish_year === 'number' ? doc.first_publish_year : undefined,
             };
           });
         }

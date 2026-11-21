@@ -88,7 +88,7 @@ export const getRichBookDetail = (book: { id: string; title: string; author: str
   
   const description = `Buku "${book.title}" merupakan karya luar biasa dari ${book.author} yang membahas tema mendalam seputar ${genres.join(', ')}. Ditulis dengan gaya yang memikat dan alur pemikiran yang runut, buku ini menyajikan wawasan mendalam dan perspektif baru bagi pembacanya.\n\nSebuah bacaan yang sangat direkomendasikan untuk siapa saja yang ingin memperluas cakrawala berpikir dan menemukan inspirasi berharga di setiap halamannya.`;
 
-  const authorAvatar = `https://images.unsplash.com/photo-${1535713875002-d1d0cf377fde}?auto=format&fit=crop&w=150&h=150&q=80`;
+  const authorAvatar = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80';
   const authorBio = `${book.author} adalah seorang penulis profesional yang berfokus pada bidang ${category}. Melalui karya-karyanya, ia berusaha memberikan dampak positif dan berbagi perspektif yang mencerahkan bagi komunitas pembaca di seluruh dunia.`;
   const authorStats = `0 books · 0 followers`;
   

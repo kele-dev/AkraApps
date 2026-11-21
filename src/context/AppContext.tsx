@@ -11,24 +11,30 @@ import { safeStorageGet, safeStorageRemove, safeStorageSet } from '../lib/storag
 import { clampGoalTarget, createUniqueId } from '../lib/idAndMath';
 
 // Helper to recursively clean undefined values for Firestore
-const cleanUndefined = (obj: any): any => {
-  if (obj === null || obj === undefined) return null;
-  const newObj = { ...obj };
+const cleanUndefined = <T,>(obj: T): T => {
+  if (obj === null || obj === undefined || typeof obj !== 'object') return obj;
+  const newObj: Record<string, unknown> = { ...(obj as Record<string, unknown>) };
   Object.keys(newObj).forEach((key) => {
-    if (newObj[key] === undefined) {
+    const val = newObj[key];
+    if (val === undefined) {
       delete newObj[key];
-    } else if (newObj[key] !== null && typeof newObj[key] === 'object') {
-      if (Array.isArray(newObj[key])) {
-        newObj[key] = newObj[key].map((item: any) => 
-          item !== null && typeof item === 'object' ? cleanUndefined(item) : item
+    } else if (val !== null && typeof val === 'object') {
+      if (Array.isArray(val)) {
+        newObj[key] = val.map((item: unknown) =>
+          item !== null && typeof item === 'object'
+            ? cleanUndefined(item)
+            : item
         );
       } else {
-        newObj[key] = cleanUndefined(newObj[key]);
+        newObj[key] = cleanUndefined(val);
       }
     }
   });
-  return newObj;
+  return newObj as T;
 };
+
+const toFirestoreData = <T extends object>(obj: T): Record<string, unknown> =>
+  cleanUndefined({ ...obj }) as Record<string, unknown>;
 
 interface AppContextProps {
   currentUser: User;
@@ -397,9 +403,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Sync from Firestore
   const syncDataFromFirestore = async (userId: string, userObj: User) => {
+    const firestoreDb = db;
+    if (!firestoreDb) return;
     try {
       // 1. Fetch Logged In User Profile from Firestore
-      const userDocRef = doc(db, 'users', userId);
+      const userDocRef = doc(firestoreDb, 'users', userId);
       const userDocSnap = await getDoc(userDocRef);
       let finalUser = userObj;
       if (userDocSnap.exists()) {
@@ -407,20 +415,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCurrentUser(finalUser);
       } else {
         // First time logging in, save the profile
-        await setDoc(userDocRef, cleanUndefined(userObj));
+        await setDoc(userDocRef, toFirestoreData(userObj));
         setCurrentUser(userObj);
       }
       setIsLoggedIn(true);
 
-      const booksQuery = query(collection(db, 'books'), limit(FIRESTORE_QUERY_LIMITS.books));
-      const usersQuery = query(collection(db, 'users'), limit(FIRESTORE_QUERY_LIMITS.users));
-      const progressQuery = query(collection(db, 'progress'), limit(FIRESTORE_QUERY_LIMITS.progress));
+      const booksQuery = query(collection(firestoreDb, 'books'), limit(FIRESTORE_QUERY_LIMITS.books));
+      const usersQuery = query(collection(firestoreDb, 'users'), limit(FIRESTORE_QUERY_LIMITS.users));
+      const progressQuery = query(collection(firestoreDb, 'progress'), limit(FIRESTORE_QUERY_LIMITS.progress));
       const goalsQuery = query(
-        collection(db, 'goals'),
+        collection(firestoreDb, 'goals'),
         where('userId', '==', userId),
         limit(FIRESTORE_QUERY_LIMITS.goals)
       );
-      const postsQuery = query(collection(db, 'posts'), limit(FIRESTORE_QUERY_LIMITS.posts));
+      const postsQuery = query(collection(firestoreDb, 'posts'), limit(FIRESTORE_QUERY_LIMITS.posts));
 
       const [booksSnap, usersSnap, progressSnap, goalsSnap, postsSnap] = await Promise.all([
         getDocs(booksQuery),
@@ -484,7 +492,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Sync to Firestore via chunked writeBatch (only current user's owned documents)
   const syncDataToFirestore = async () => {
-    if (isDemoMode || !db || currentUser.id === 'guest') return;
+    const firestoreDb = db;
+    if (isDemoMode || !firestoreDb || currentUser.id === 'guest') return;
     try {
       const owned = filterOwnedRecordsForSync(currentUser.id, {
         readingProgress,
@@ -493,15 +502,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       const ops: Array<{ ref: ReturnType<typeof doc>; data: Record<string, unknown> }> = [
-        ...books.map((book) => ({ ref: doc(db, 'books', book.id), data: cleanUndefined(book) })),
-        ...owned.readingProgress.map((p) => ({ ref: doc(db, 'progress', p.id), data: cleanUndefined(p) })),
-        ...owned.goals.map((g) => ({ ref: doc(db, 'goals', `${g.userId}_${g.year}`), data: cleanUndefined(g) })),
-        ...owned.posts.map((post) => ({ ref: doc(db, 'posts', post.id), data: cleanUndefined(post) })),
+        ...books.map((book) => ({ ref: doc(firestoreDb, 'books', book.id), data: toFirestoreData(book) })),
+        ...owned.readingProgress.map((p) => ({ ref: doc(firestoreDb, 'progress', p.id), data: toFirestoreData(p) })),
+        ...owned.goals.map((g) => ({ ref: doc(firestoreDb, 'goals', `${g.userId}_${g.year}`), data: toFirestoreData(g) })),
+        ...owned.posts.map((post) => ({ ref: doc(firestoreDb, 'posts', post.id), data: toFirestoreData(post) })),
       ];
 
       const CHUNK_SIZE = 450;
       for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
-        const batch = writeBatch(db);
+        const batch = writeBatch(firestoreDb);
         for (const op of ops.slice(i, i + CHUNK_SIZE)) {
           batch.set(op.ref, op.data);
         }
@@ -879,8 +888,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (isDemoMode) {
       safeStorageSet('akra_current_user', updatedUser);
     } else if (db) {
+      const firestoreDb = db;
       try {
-        await setDoc(doc(db, 'users', currentUser.id), cleanUndefined(updatedUser));
+        await setDoc(doc(firestoreDb, 'users', currentUser.id), toFirestoreData(updatedUser));
       } catch (e) {
         console.error("Gagal menyimpan profil ke Firestore:", e);
         setActionError('Gagal menyimpan perubahan profil ke server.');

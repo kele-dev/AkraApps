@@ -5,7 +5,7 @@ import { useApp, translations } from '../../context/AppContext';
 import { Search, Star, ChevronDown, Check, Users, BookOpen, Quote, HelpCircle } from 'lucide-react';
 import { LOCAL_BOOK_DATABASE } from '../Books/Books';
 import { Book } from '../../types';
-import { searchBooksHybrid } from '../../lib/bookApi';
+import { searchBooksHybrid, type SearchBookResult } from '../../lib/bookApi';
 
 export const SearchPage: React.FC = () => {
   const { 
@@ -28,7 +28,7 @@ export const SearchPage: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'books' | 'groups' | 'quotes' | 'people' | 'listopia'>('books');
 
   // Search execution states
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchBookResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchTime, setSearchTime] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
@@ -125,7 +125,7 @@ export const SearchPage: React.FC = () => {
   };
 
   // Add book to library and set shelf
-  const handleAddToShelf = (bookData: any, status: 'WANT_TO_READ' | 'READING' | 'COMPLETED') => {
+  const handleAddToShelf = (bookData: Book | SearchBookResult, status: 'WANT_TO_READ' | 'READING' | 'COMPLETED') => {
     // 1. Check if already in library
     let existing = books.find(
       (b) => b.title.toLowerCase() === bookData.title.toLowerCase() && b.author.toLowerCase() === bookData.author.toLowerCase()
@@ -156,7 +156,7 @@ export const SearchPage: React.FC = () => {
   };
 
   // Rate book directly
-  const handleRateBook = (bookData: any, rating: number) => {
+  const handleRateBook = (bookData: Book | SearchBookResult, rating: number) => {
     setUserRatings(prev => ({ ...prev, [bookData.title + bookData.author]: rating }));
     // Automatically add to library as completed/read
     handleAddToShelf(bookData, 'COMPLETED');
@@ -216,17 +216,17 @@ export const SearchPage: React.FC = () => {
 
         {/* Radio Filter Options */}
         <div className="flex gap-4 items-center text-xs text-text-slate-medium pl-1 select-none">
-          {[
+          {([
             { id: 'all', label: language === 'id' ? 'semua' : 'all' },
             { id: 'title', label: language === 'id' ? 'judul' : 'title' },
             { id: 'author', label: language === 'id' ? 'penulis' : 'author' }
-          ].map((item) => (
+          ] as const).map((item) => (
             <label key={item.id} className="flex items-center gap-1.5 cursor-pointer">
               <input
                 type="radio"
                 name="searchFilter"
                 checked={searchFilter === item.id}
-                onChange={() => setSearchFilter(item.id as any)}
+                onChange={() => setSearchFilter(item.id)}
                 className="accent-brand-orange text-brand-orange"
               />
               <span className={searchFilter === item.id ? "text-text-slate-dark font-semibold" : ""}>
@@ -239,16 +239,16 @@ export const SearchPage: React.FC = () => {
 
       {/* Sub-tabs Navigation */}
       <div className="flex border-b border-border-light-gray overflow-x-auto">
-        {[
+        {([
           { id: 'books', label: language === 'id' ? 'Buku' : 'Books' },
           { id: 'groups', label: language === 'id' ? 'Grup' : 'Groups' },
           { id: 'quotes', label: language === 'id' ? 'Kutipan' : 'Quotes' },
           { id: 'people', label: language === 'id' ? 'Teman' : 'People' },
           { id: 'listopia', label: 'Listopia' }
-        ].map((tab) => (
+        ] as const).map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveSubTab(tab.id as any)}
+            onClick={() => setActiveSubTab(tab.id)}
             className={`px-4 py-2 border-none font-bold text-xs whitespace-nowrap cursor-pointer transition-all border-b-2 ${
               activeSubTab === tab.id
                 ? 'border-[#382110] text-[#382110] font-extrabold'
@@ -345,25 +345,25 @@ export const SearchPage: React.FC = () => {
 
                         {/* Ratings statistics */}
                         <div className="flex items-center gap-1 text-[10px] text-text-slate-medium">
-                          {book.ratingsCount > 0 ? (
+                          {(book.ratingsCount ?? 0) > 0 ? (
                             <>
                               <div className="flex text-yellow-500 shrink-0">
                                 {[1, 2, 3, 4, 5].map((s) => (
                                   <Star
                                     key={s}
                                     size={10}
-                                    fill={s <= Math.round(book.rating) ? "currentColor" : "none"}
+                                    fill={s <= Math.round(book.rating ?? 0) ? "currentColor" : "none"}
                                     className="stroke-1"
                                   />
                                 ))}
                               </div>
                               <span>
-                                {book.rating.toFixed(2)} rating rata-rata — {book.ratingsCount.toLocaleString('id-ID')} penilaian — terbit {book.firstPublishYear}
+                                {(book.rating ?? 0).toFixed(2)} rating rata-rata — {(book.ratingsCount ?? 0).toLocaleString('id-ID')} penilaian — terbit {book.firstPublishYear ?? '-'}
                               </span>
                             </>
                           ) : (
                             <span>
-                              Belum ada penilaian — terbit {book.firstPublishYear}
+                              Belum ada penilaian — terbit {book.firstPublishYear ?? '-'}
                             </span>
                           )}
                         </div>
@@ -406,15 +406,15 @@ export const SearchPage: React.FC = () => {
                             {/* Dropdown Options overlay */}
                             {activeDropdownId === book.id && (
                               <div className="absolute left-0 mt-8 w-40 bg-white border border-border-light-gray rounded shadow-md flex flex-col p-1 z-50 animate-fade-in divide-y divide-border-light-gray/50">
-                                {[
+                                {([
                                   { id: 'WANT_TO_READ', label: translations[language].wantToRead },
                                   { id: 'READING', label: translations[language].currentlyReading },
                                   { id: 'COMPLETED', label: translations[language].read }
-                                ].map((option) => (
+                                ] as const).map((option) => (
                                   <button
                                     key={option.id}
                                     type="button"
-                                    onClick={() => handleAddToShelf(book, option.id as any)}
+                                    onClick={() => handleAddToShelf(book, option.id)}
                                     className="w-full text-left px-2 py-1.5 text-[10px] font-semibold text-text-slate-medium hover:bg-gray-100 hover:text-text-slate-dark transition-all border-none bg-transparent cursor-pointer"
                                   >
                                     {option.label}

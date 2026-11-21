@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext';
 import { Bell, MessageSquare, Users, Search, LogOut, User } from 'lucide-react';
 import { LOCAL_BOOK_DATABASE } from '../features/Books/Books';
 import { AnimatedBook } from './AnimatedBook';
-import { searchBooksHybrid } from '../lib/bookApi';
+import { searchBooksHybrid, type SearchBookResult } from '../lib/bookApi';
 
 export const Header: React.FC = () => {
   const { 
@@ -36,7 +36,7 @@ export const Header: React.FC = () => {
 
   // Suggestions state
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [onlineSuggestions, setOnlineSuggestions] = useState<any[]>([]);
+  const [onlineSuggestions, setOnlineSuggestions] = useState<SearchBookResult[]>([]);
   const [isSearchingOnline, setIsSearchingOnline] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -80,7 +80,7 @@ export const Header: React.FC = () => {
         if (controller.signal.aborted) return;
         
         // Filter out duplicates (already in books or LOCAL_BOOK_DATABASE)
-        const filteredResults = results.filter((onlineBook: any) => {
+        const filteredResults = results.filter((onlineBook) => {
           const inMyBooks = books.some(
             (mb) => mb.title.toLowerCase() === onlineBook.title.toLowerCase() && 
                     mb.author.toLowerCase() === onlineBook.author.toLowerCase()
@@ -253,7 +253,7 @@ export const Header: React.FC = () => {
                       type="button"
                       key={b.id}
                       onClick={() => {
-                        viewBookDetails(b as any);
+                        viewBookDetails(b);
                         setLocalSearch('');
                         setShowSuggestions(false);
                       }}
@@ -341,7 +341,7 @@ export const Header: React.FC = () => {
                         type="button"
                         key={b.id}
                         onClick={() => {
-                          viewBookDetails(b as any);
+                          viewBookDetails(b);
                           setLocalSearch('');
                           setShowSuggestions(false);
                         }}

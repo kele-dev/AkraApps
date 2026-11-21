@@ -173,10 +173,12 @@ export const BookDetails: React.FC = () => {
           }
 
           if (editionsRes?.ok) {
-            const editionsData = await editionsRes.json();
+            const editionsData = (await editionsRes.json()) as {
+              entries?: Array<{ number_of_pages?: number; physical_format?: string }>;
+            };
             if (editionsData.entries && editionsData.entries.length > 0) {
-              const withPages = editionsData.entries.find((e: any) => e.number_of_pages && e.number_of_pages > 5);
-              if (withPages) {
+              const withPages = editionsData.entries.find((e) => e.number_of_pages && e.number_of_pages > 5);
+              if (withPages && withPages.number_of_pages) {
                 pages = withPages.number_of_pages;
                 if (withPages.physical_format) binding = withPages.physical_format;
               } else {
@@ -484,15 +486,15 @@ export const BookDetails: React.FC = () => {
             {/* Shelf Dropdown Overlay */}
             {showShelfDropdown && (
               <div className="absolute left-0 right-0 mt-1.5 bg-white border border-border-light-gray rounded-md shadow-md flex flex-col p-1 z-40 divide-y divide-border-light-gray/50 animate-fade-in">
-                {[
+                {([
                   { id: 'WANT_TO_READ', label: translations[language].wantToRead },
                   { id: 'READING', label: translations[language].currentlyReading },
                   { id: 'COMPLETED', label: translations[language].read }
-                ].map((option) => (
+                ] as const).map((option) => (
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() => handleShelfChange(option.id as any)}
+                    onClick={() => handleShelfChange(option.id)}
                     className="w-full text-left px-3 py-2 text-xs font-semibold text-text-slate-medium hover:bg-gray-50 hover:text-text-slate-dark transition-all border-none bg-transparent cursor-pointer flex items-center justify-between"
                   >
                     <span>{option.label}</span>
