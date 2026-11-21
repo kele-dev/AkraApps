@@ -18,6 +18,12 @@ export interface RichBookDetail {
   authorStats?: string;
   currentlyReadingCount?: number;
   wantToReadCount?: number;
+  isbn13?: string;
+  isbn10?: string;
+  publisher?: string;
+  editionLanguage?: string;
+  characters?: string[];
+  setting?: string;
 }
 
 export const getRichBookDetail = (book: { id: string; title: string; author: string; coverImage: string; totalPages: number; category?: string }): RichBookDetail => {

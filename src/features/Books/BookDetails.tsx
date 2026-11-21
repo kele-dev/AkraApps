@@ -9,6 +9,7 @@ import { BookCover, UserAvatar } from '../../components/Media';
 import { BuddyReadSection } from './BuddyReadSection';
 import { fetchWithTimeout } from '../../lib/http';
 import { resolveUserBookRating } from '../../lib/bookRating';
+import { extractEditionMetadata, type OpenLibraryEditionEntry } from '../../lib/editionMetadata';
 import { logger } from '../../lib/logger';
 
 export const BookDetails: React.FC = () => {
@@ -123,6 +124,16 @@ export const BookDetails: React.FC = () => {
           const publishedDate = workData.first_publish_date || "2015";
           let pages = selectedBook.totalPages || 200;
           let binding = "Paperback";
+          let isbn13: string | undefined;
+          let isbn10: string | undefined;
+          let publisher: string | undefined;
+          let editionLanguage: string | undefined;
+          const characters = Array.isArray(workData.subject_people)
+            ? (workData.subject_people as string[]).slice(0, 5)
+            : undefined;
+          const setting = Array.isArray(workData.subject_places) && workData.subject_places.length > 0
+            ? (workData.subject_places as string[]).slice(0, 3).join(', ')
+            : undefined;
           let authorName = selectedBook.author;
           let authorAvatar = "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&h=150&q=80";
           let authorBio = `${authorName} adalah penulis terkemuka yang berkontribusi banyak dalam dunia sastra.`;
@@ -167,7 +178,7 @@ export const BookDetails: React.FC = () => {
 
           if (editionsRes?.ok) {
             const editionsData = (await editionsRes.json()) as {
-              entries?: Array<{ number_of_pages?: number; physical_format?: string }>;
+              entries?: OpenLibraryEditionEntry[];
             };
             if (editionsData.entries && editionsData.entries.length > 0) {
               const withPages = editionsData.entries.find((e) => e.number_of_pages && e.number_of_pages > 5);
@@ -179,6 +190,11 @@ export const BookDetails: React.FC = () => {
                 if (first.number_of_pages) pages = first.number_of_pages;
                 if (first.physical_format) binding = first.physical_format;
               }
+              const meta = extractEditionMetadata(editionsData.entries);
+              isbn13 = meta.isbn13;
+              isbn10 = meta.isbn10;
+              publisher = meta.publisher;
+              editionLanguage = meta.languageLabel;
             }
           }
 
@@ -222,7 +238,13 @@ export const BookDetails: React.FC = () => {
               authorBio,
               authorStats,
               currentlyReadingCount,
-              wantToReadCount
+              wantToReadCount,
+              isbn13,
+              isbn10,
+              publisher,
+              editionLanguage,
+              characters,
+              setting,
             });
             setIsLoading(false);
           }
@@ -675,30 +697,49 @@ export const BookDetails: React.FC = () => {
 
             {isEditionsExpanded && (
               <div className="mt-3 pl-3 border-l border-border-light-gray flex flex-col gap-2.5 text-xs text-text-slate-medium animate-slide-in">
+                {(richDetail.isbn13 || richDetail.isbn10) && (
+                  <div className="grid grid-cols-[100px_1fr] gap-2">
+                    <span className="font-semibold text-[#181818]">ISBN:</span>
+                    <span>
+                      {[richDetail.isbn13, richDetail.isbn10 ? `ISBN10: ${richDetail.isbn10}` : null]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                  </div>
+                )}
                 <div className="grid grid-cols-[100px_1fr] gap-2">
-                  <span className="font-semibold text-[#181818]">ISBN:</span>
-                  <span>9789792261882 (ISBN10: 9792261883)</span>
+                  <span className="font-semibold text-[#181818]">Format:</span>
+                  <span>{richDetail.binding}</span>
                 </div>
-                <div className="grid grid-cols-[100px_1fr] gap-2">
-                  <span className="font-semibold text-[#181818]">{language === 'id' ? 'Format:' : 'Format:'}</span>
-                  <span>{richDetail.binding} (Reprint Edition)</span>
-                </div>
-                <div className="grid grid-cols-[100px_1fr] gap-2">
-                  <span className="font-semibold text-[#181818]">{language === 'id' ? 'Penerbit:' : 'Publisher:'}</span>
-                  <span>Gramedia Pustaka Utama</span>
-                </div>
-                <div className="grid grid-cols-[100px_1fr] gap-2">
-                  <span className="font-semibold text-[#181818]">{language === 'id' ? 'Bahasa:' : 'Language:'}</span>
-                  <span>{language === 'id' ? 'Bahasa Indonesia' : 'Indonesian'}</span>
-                </div>
-                <div className="grid grid-cols-[100px_1fr] gap-2">
-                  <span className="font-semibold text-[#181818]">Characters:</span>
-                  <span>Tanya, Dede, Ibu, Danar</span>
-                </div>
-                <div className="grid grid-cols-[100px_1fr] gap-2 flex-wrap">
-                  <span className="font-semibold text-[#181818]">Setting:</span>
-                  <span>Jakarta, Indonesia</span>
-                </div>
+                {richDetail.publisher && (
+                  <div className="grid grid-cols-[100px_1fr] gap-2">
+                    <span className="font-semibold text-[#181818]">{language === 'id' ? 'Penerbit:' : 'Publisher:'}</span>
+                    <span>{richDetail.publisher}</span>
+                  </div>
+                )}
+                {richDetail.editionLanguage && (
+                  <div className="grid grid-cols-[100px_1fr] gap-2">
+                    <span className="font-semibold text-[#181818]">{language === 'id' ? 'Bahasa:' : 'Language:'}</span>
+                    <span>{richDetail.editionLanguage}</span>
+                  </div>
+                )}
+                {richDetail.characters && richDetail.characters.length > 0 && (
+                  <div className="grid grid-cols-[100px_1fr] gap-2">
+                    <span className="font-semibold text-[#181818]">Characters:</span>
+                    <span>{richDetail.characters.join(', ')}</span>
+                  </div>
+                )}
+                {richDetail.setting && (
+                  <div className="grid grid-cols-[100px_1fr] gap-2 flex-wrap">
+                    <span className="font-semibold text-[#181818]">Setting:</span>
+                    <span>{richDetail.setting}</span>
+                  </div>
+                )}
+                {!richDetail.isbn13 && !richDetail.isbn10 && !richDetail.publisher && !richDetail.editionLanguage && (
+                  <p className="text-[11px] text-text-slate-light italic">
+                    {language === 'id' ? 'Detail edisi lengkap belum tersedia untuk buku ini.' : 'Full edition metadata is not available for this title.'}
+                  </p>
+                )}
               </div>
             )}
           </div>
