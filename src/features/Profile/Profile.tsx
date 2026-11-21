@@ -3,9 +3,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp, translations } from '../../context/AppContext';
 import { Card } from '../../components/Card';
+import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal';
 import { Modal } from '../../components/Modal';
 import { ProgressBar } from '../../components/ProgressBar';
 import { BookCover, UserAvatar } from '../../components/Media';
+import { formatRelativeTime } from '../../lib/dateUtils';
 import { 
   BookOpen, CheckCircle, Flame, FileText, ArrowLeft, Trophy, Edit2, Check, 
   Award, Plus, FolderHeart, ChevronDown, ChevronRight, MoreVertical, Trash2,
@@ -213,15 +215,7 @@ export const Profile: React.FC = () => {
   };
 
   // Relative time helper
-  const relativeTime = (dateStr: string) => {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-    if (mins < 60) return `${mins} menit lalu`;
-    if (hours < 24) return `${hours} jam lalu`;
-    return `${days} hari lalu`;
-  };
+  const relativeTime = (dateStr: string) => formatRelativeTime(dateStr, language);
 
   // Join date format
   const joinDate = targetUser.joinedAt 
@@ -936,45 +930,20 @@ export const Profile: React.FC = () => {
       </div>
 
       {/* ============ DELETE CONFIRMATION MODAL ============ */}
-      <Modal
+      <ConfirmDeleteModal
         isOpen={Boolean(deleteConfirmPostId)}
         onClose={() => setDeleteConfirmPostId(null)}
-        ariaLabel={translations[language].deleteActivityTitle}
-        backdropClassName="bg-black/60 backdrop-blur-xs"
-      >
-        {deleteConfirmPostId && (
-          <Card className="max-w-xs w-full p-6 flex flex-col gap-4 animate-slide-in">
-            <div className="text-center">
-              <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-3 text-lg">
-                ⚠️
-              </div>
-              <h4 className="text-sm font-bold text-text-slate-dark mb-1">Hapus Aktivitas?</h4>
-              <p className="text-xs text-text-slate-medium leading-relaxed">
-                Apakah Anda yakin ingin menghapus aktivitas membaca ini? Tindakan ini tidak dapat dibatalkan.
-              </p>
-            </div>
-            <div className="flex gap-2.5 mt-2">
-              <button
-                type="button"
-                onClick={() => setDeleteConfirmPostId(null)}
-                className="btn-secondary flex-1 py-2 text-xs font-bold rounded-lg border-none cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  deletePost(deleteConfirmPostId);
-                  setDeleteConfirmPostId(null);
-                }}
-                className="bg-red-500 hover:bg-red-600 text-white flex-1 py-2 text-xs font-bold rounded-lg border-none cursor-pointer shadow-sm transition-colors"
-              >
-                Hapus
-              </button>
-            </div>
-          </Card>
-        )}
-      </Modal>
+        onConfirm={() => {
+          if (deleteConfirmPostId) {
+            deletePost(deleteConfirmPostId);
+            setDeleteConfirmPostId(null);
+          }
+        }}
+        title={translations[language].deleteActivityTitle}
+        description={translations[language].deleteActivityConfirm}
+        cancelLabel={translations[language].cancel}
+        confirmLabel={translations[language].delete}
+      />
 
       {/* ============ EDIT PROFILE MODAL ============ */}
       <Modal

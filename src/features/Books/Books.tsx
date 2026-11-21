@@ -7,6 +7,7 @@ import { ProgressBar } from '../../components/ProgressBar';
 import { BookCover } from '../../components/Media';
 import { Plus, CheckCircle, Clock, ListPlus } from 'lucide-react';
 import { searchBooksHybrid, type SearchBookResult } from '../../lib/bookApi';
+import { filterLocalBooks } from '../../lib/bookSearchUtils';
 import type { Book } from '../../types';
 
 export const LOCAL_BOOK_DATABASE: Book[] = [];
@@ -54,11 +55,8 @@ export const Books: React.FC = () => {
 
   const triggerLocalFallback = (warningMsg: string, queryToUse?: string) => {
     setSearchWarning(warningMsg);
-    const q = (typeof queryToUse === 'string' ? queryToUse : searchQuery).toLowerCase();
-    const filtered = LOCAL_BOOK_DATABASE.filter(
-      (b) => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q)
-    );
-    setSearchResults(filtered);
+    const q = typeof queryToUse === 'string' ? queryToUse : searchQuery;
+    setSearchResults(filterLocalBooks(LOCAL_BOOK_DATABASE, q));
   };
 
   const handleApiSearch = async (overrideQuery?: string) => {

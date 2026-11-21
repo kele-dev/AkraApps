@@ -7,6 +7,7 @@ import { LOCAL_BOOK_DATABASE } from '../features/Books/Books';
 import { AnimatedBook } from './AnimatedBook';
 import { BookCover, UserAvatar } from './Media';
 import { searchBooksHybrid, type SearchBookResult } from '../lib/bookApi';
+import { formatRelativeTime } from '../lib/dateUtils';
 
 export const Header: React.FC = () => {
   const { 
@@ -442,15 +443,7 @@ export const Header: React.FC = () => {
                             COMPLETED: '🎉'
                           }[notif.type];
 
-                          const relativeTime = (() => {
-                            const diff = Date.now() - new Date(notif.createdAt).getTime();
-                            const mins = Math.floor(diff / 60000);
-                            const hours = Math.floor(diff / 3600000);
-                            const days = Math.floor(diff / 86400000);
-                            if (mins < 60) return `${mins}m lalu`;
-                            if (hours < 24) return `${hours}j lalu`;
-                            return `${days}h lalu`;
-                          })();
+                          const relativeTime = formatRelativeTime(notif.createdAt, language, new Date(), { compact: true });
 
                           return (
                             <div

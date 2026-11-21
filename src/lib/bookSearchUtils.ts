@@ -100,3 +100,15 @@ export const deduplicateBookResults = (
 
   return uniqueResults;
 };
+
+/** Filter local catalog entries by case-insensitive title or author match. */
+export const filterLocalBooks = <T extends { title: string; author: string }>(
+  books: T[],
+  query: string
+): T[] => {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  return books.filter(
+    (b) => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q)
+  );
+};

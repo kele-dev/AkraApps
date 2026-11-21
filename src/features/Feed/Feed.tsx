@@ -3,8 +3,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp, translations } from '../../context/AppContext';
 import { Card } from '../../components/Card';
+import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal';
 import { Modal } from '../../components/Modal';
 import { BookCover, UserAvatar } from '../../components/Media';
+import { formatRelativeTime } from '../../lib/dateUtils';
 import { MessageSquare, Bookmark, Quote, BookOpen, Send, Star, ChevronDown, Check, Image, X, Heart } from 'lucide-react';
 import { compressImageFileToDataUrl } from '../../lib/storage';
 import { computePercent } from '../../lib/idAndMath';
@@ -170,21 +172,11 @@ export const Feed: React.FC = () => {
     setActiveLogBookId(null);
   };
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-
-    if (diffMins < 60) {
-      return diffMins <= 1 ? 'Baru saja' : `${diffMins}m lalu`;
-    } else if (diffHours < 24) {
-      return `${diffHours}j lalu`;
-    } else {
-      return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-    }
-  };
+  const formatDate = (dateStr: string) =>
+    formatRelativeTime(dateStr, language, new Date(), {
+      compact: true,
+      fallbackToDateAfterHours: 24,
+    });
 
   // Find Currently Reading books
   const userProgress = readingProgress.filter((p) => p.userId === currentUser.id);
@@ -1248,45 +1240,20 @@ export const Feed: React.FC = () => {
       </Modal>
 
       {/* ============ DELETE CONFIRMATION MODAL ============ */}
-      <Modal
+      <ConfirmDeleteModal
         isOpen={Boolean(deleteConfirmPostId)}
         onClose={() => setDeleteConfirmPostId(null)}
-        ariaLabel={translations[language].deleteActivityTitle}
-        backdropClassName="bg-black/60 backdrop-blur-xs"
-      >
-        {deleteConfirmPostId && (
-          <Card className="max-w-xs w-full p-6 flex flex-col gap-4 animate-slide-in">
-            <div className="text-center">
-              <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-3 text-lg">
-                ⚠️
-              </div>
-              <h4 className="text-sm font-bold text-text-slate-dark mb-1">{translations[language].deleteActivityTitle}</h4>
-              <p className="text-xs text-text-slate-medium leading-relaxed">
-                {translations[language].deleteActivityConfirm}
-              </p>
-            </div>
-            <div className="flex gap-2.5 mt-2">
-              <button
-                type="button"
-                onClick={() => setDeleteConfirmPostId(null)}
-                className="btn-secondary flex-1 py-2 text-xs font-bold rounded-lg border-none cursor-pointer"
-              >
-                {translations[language].cancel}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  deletePost(deleteConfirmPostId);
-                  setDeleteConfirmPostId(null);
-                }}
-                className="bg-red-500 hover:bg-red-600 text-white flex-1 py-2 text-xs font-bold rounded-lg border-none cursor-pointer shadow-sm transition-colors"
-              >
-                {translations[language].delete}
-              </button>
-            </div>
-          </Card>
-        )}
-      </Modal>
+        onConfirm={() => {
+          if (deleteConfirmPostId) {
+            deletePost(deleteConfirmPostId);
+            setDeleteConfirmPostId(null);
+          }
+        }}
+        title={translations[language].deleteActivityTitle}
+        description={translations[language].deleteActivityConfirm}
+        cancelLabel={translations[language].cancel}
+        confirmLabel={translations[language].delete}
+      />
 
     </div>
   );

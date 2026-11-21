@@ -6,6 +6,7 @@ import { Search, Star, ChevronDown, Check, Users, BookOpen, Quote, HelpCircle } 
 import { LOCAL_BOOK_DATABASE } from '../Books/Books';
 import { Book } from '../../types';
 import { searchBooksHybrid, type SearchBookResult } from '../../lib/bookApi';
+import { filterLocalBooks } from '../../lib/bookSearchUtils';
 import { BookCover, UserAvatar } from '../../components/Media';
 
 export const SearchPage: React.FC = () => {
@@ -96,13 +97,7 @@ export const SearchPage: React.FC = () => {
 
   const triggerLocalFallback = (queryText: string, startTime: number, warningMsg = '') => {
     setSearchWarning(warningMsg || "Buku tidak ditemukan. Menampilkan hasil database lokal.");
-    const q = queryText.toLowerCase();
-    
-    // Filter database
-    const filtered = LOCAL_BOOK_DATABASE.filter(
-      (b) => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q)
-    );
-
+    const filtered = filterLocalBooks(LOCAL_BOOK_DATABASE, queryText);
     setSearchResults(filtered);
     setTotalResults(filtered.length);
     const endTime = performance.now();
