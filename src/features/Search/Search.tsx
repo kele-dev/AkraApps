@@ -6,6 +6,7 @@ import { Search, Star, ChevronDown, Check, Users, BookOpen, Quote, HelpCircle } 
 import { Book } from '../../types';
 import { searchBooksHybrid, type SearchBookResult } from '../../lib/bookApi';
 import { filterLocalBooks } from '../../lib/bookSearchUtils';
+import { buildListopiaRankings, buildReadingClubs } from '../../lib/communityDiscovery';
 import { logger } from '../../lib/logger';
 import { BookCover, UserAvatar } from '../../components/Media';
 
@@ -17,10 +18,13 @@ export const SearchPage: React.FC = () => {
     addBook, 
     users, 
     posts, 
+    buddyReads,
+    startBuddyRead,
     globalSearchQuery, 
     setGlobalSearchQuery,
     currentUser,
     viewBookDetails,
+    setCurrentTab,
     language
   } = useApp();
 
@@ -516,12 +520,191 @@ export const SearchPage: React.FC = () => {
           </div>
         )}
 
-        {(activeSubTab === 'groups' || activeSubTab === 'listopia') && (
-          <div className="py-16 flex flex-col items-center gap-2 text-text-slate-light border border-border-light-gray bg-bg-light-gray/40 rounded-lg">
-            <Users size={28} className="text-text-slate-light/60" />
-            <span className="text-xs font-semibold text-text-slate-medium">Fitur {activeSubTab === 'groups' ? 'Grup' : 'Listopia'} sedang dikembangkan.</span>
-          </div>
-        )}
+        {activeSubTab === 'groups' && (() => {
+          const clubs = buildReadingClubs(buddyReads, books, users, searchQuery);
+          const otherUsers = users.filter((u) => u.id !== currentUser.id);
+          return (
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between text-xs text-text-slate-medium">
+                <span className="italic">
+                  {language === 'id'
+                    ? `Klub Baca Aktif (${clubs.length} grup)`
+                    : `Active Reading Clubs (${clubs.length} groups)`}
+                </span>
+              </div>
+
+              {clubs.length > 0 ? (
+                <div className="flex flex-col gap-3">
+                  {clubs.map((club) => {
+                    const isMember = club.members.some((m) => m.id === currentUser.id);
+                    const hostId = club.members[0]?.id;
+                    return (
+                      <div
+                        key={club.buddyReadId}
+                        className="border border-border-light-gray rounded-lg p-3.5 flex items-center gap-3.5 bg-white hover:border-brand-orange/40 transition-colors"
+                      >
+                        <BookCover
+                          src={club.book.coverImage}
+                          alt={club.book.title}
+                          width={44}
+                          height={64}
+                          className="w-11 h-16 object-cover rounded border border-border-light-gray shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-sm font-bold text-text-slate-dark truncate">
+                            {club.book.title}
+                          </h4>
+                          <p className="text-[11px] text-text-slate-medium truncate">
+                            {club.book.author} · {club.members.length}{' '}
+                            {language === 'id' ? 'anggota' : 'members'}
+                          </p>
+                          <div className="flex -space-x-1.5 mt-1.5">
+                            {club.members.slice(0, 4).map((m) => (
+                              <UserAvatar
+                                key={m.id}
+                                src={m.avatar}
+                                alt={m.displayName}
+                                width={20}
+                                height={20}
+                                title={m.displayName}
+                                className="w-5 h-5 rounded-full object-cover border border-white"
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!isMember && hostId) {
+                              startBuddyRead(club.book.id, hostId);
+                            }
+                            viewBookDetails(club.book);
+                          }}
+                          className="btn-primary py-1.5 px-3 text-xs shrink-0"
+                        >
+                          {isMember
+                            ? language === 'id'
+                              ? 'Buka Diskusi'
+                              : 'Open Chat'
+                            : language === 'id'
+                              ? 'Gabung Grup'
+                              : 'Join Club'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-12 flex flex-col items-center gap-3 text-center border border-border-light-gray bg-bg-light-gray/40 rounded-lg px-4">
+                  <Users size={28} className="text-text-slate-light/70" />
+                  <p className="text-xs font-semibold text-text-slate-medium max-w-sm">
+                    {language === 'id'
+                      ? 'Belum ada grup Buddy Read yang aktif. Pilih buku dari perpustakaan Anda lalu undang teman untuk mulai klub baca!'
+                      : 'No active Buddy Read clubs yet. Open any book from your library and invite a friend to start a reading club!'}
+                  </p>
+                  {books.length > 0 && otherUsers.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        startBuddyRead(books[0].id, otherUsers[0].id);
+                        viewBookDetails(books[0]);
+                      }}
+                      className="btn-primary py-1.5 px-4 text-xs"
+                    >
+                      {language === 'id'
+                        ? `Mulai Klub untuk "${books[0].title}"`
+                        : `Start Club for "${books[0].title}"`}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentTab('books')}
+                      className="btn-secondary py-1.5 px-4 text-xs"
+                    >
+                      {language === 'id' ? 'Jelajahi Perpustakaan' : 'Browse Library'}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {activeSubTab === 'listopia' && (() => {
+          const rankedBooks = buildListopiaRankings(books, readingProgress, searchQuery);
+          return (
+            <div className="flex flex-col gap-4">
+              <div className="text-xs text-text-slate-medium italic">
+                {language === 'id'
+                  ? `Peringkat Listopia Komunitas (${rankedBooks.length} buku)`
+                  : `Community Listopia Rankings (${rankedBooks.length} books)`}
+              </div>
+
+              {rankedBooks.length > 0 ? (
+                <div className="divide-y divide-border-light-gray flex flex-col">
+                  {rankedBooks.map((entry, idx) => {
+                    const libStatus = getLibraryStatus(entry.book.title, entry.book.author);
+                    return (
+                      <div key={entry.book.id} className="py-3.5 flex gap-3.5 items-center first:pt-0">
+                        <span className="w-7 h-7 rounded-full bg-brand-orange-glow text-brand-orange font-extrabold text-xs flex items-center justify-center shrink-0">
+                          #{idx + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => viewBookDetails(entry.book)}
+                          aria-label={entry.book.title}
+                          className="p-0 border-none bg-transparent cursor-pointer shrink-0 rounded"
+                        >
+                          <BookCover
+                            src={entry.book.coverImage}
+                            alt={entry.book.title}
+                            width={48}
+                            height={68}
+                            className="w-12 h-17 object-cover rounded border border-border-light-gray"
+                          />
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-sm font-bold text-text-slate-dark truncate">
+                            <button
+                              type="button"
+                              onClick={() => viewBookDetails(entry.book)}
+                              className="text-left bg-transparent border-none p-0 font-bold text-text-slate-dark hover:underline cursor-pointer"
+                            >
+                              {entry.book.title}
+                            </button>
+                          </h4>
+                          <p className="text-[11px] text-text-slate-medium truncate">
+                            {entry.book.author}
+                          </p>
+                          <p className="text-[10px] text-text-slate-light mt-0.5">
+                            {entry.ratingsCount > 0
+                              ? `${entry.averageRating.toFixed(2)} ★ (${entry.ratingsCount} rating) · ${entry.readerCount} ${language === 'id' ? 'pembaca' : 'readers'}`
+                              : `${entry.readerCount} ${language === 'id' ? 'pembaca' : 'readers'} · ${language === 'id' ? 'Belum dirating' : 'Unrated'}`}
+                          </p>
+                        </div>
+                        {!libStatus && (
+                          <button
+                            type="button"
+                            onClick={() => handleAddToShelf(entry.book, 'WANT_TO_READ')}
+                            className="px-3 py-1.5 bg-brand-forest hover:bg-brand-forest-hover text-white text-[11px] font-bold rounded border-none cursor-pointer shrink-0"
+                          >
+                            {translations[language].wantToRead}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-12 text-center text-text-slate-light text-xs font-semibold border border-border-light-gray bg-bg-light-gray/40 rounded-lg">
+                  {language === 'id'
+                    ? 'Belum ada buku di daftar Listopia. Tambahkan atau beri rating buku terlebih dahulu.'
+                    : 'No books ranked in Listopia yet. Add or rate books in your library first.'}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
     </div>
