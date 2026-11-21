@@ -11,7 +11,7 @@ import { ProfileActivityTabs } from './ProfileActivityTabs';
 import { 
   BookOpen, CheckCircle, Flame, FileText, ArrowLeft, Trophy, Edit2, Check, 
   Award, Plus, FolderHeart, ChevronDown, ChevronRight, MoreVertical, Trash2,
-  UserPlus, UserCheck, MessageCircle, MapPin, Calendar, Heart, MessageSquare,
+  UserPlus, UserCheck, MessageCircle, MapPin, Calendar, Bookmark,
   Quote, BookMarked, BarChart2
 } from 'lucide-react';
 import type { Book, Shelf, Post } from '../../types';
@@ -40,6 +40,7 @@ export const Profile: React.FC = () => {
     updateProfile, 
     viewBookDetails, 
     savedPostIds,
+    toggleSavePost,
     shelves,
     addShelf,
     assignBookToShelves,
@@ -69,8 +70,8 @@ export const Profile: React.FC = () => {
   const [editAvatar, setEditAvatar] = useState('');
   const [editLocation, setEditLocation] = useState('');
 
-  // Main tab: 'bookshelf' | 'updates' | 'quotes'
-  const [mainTab, setMainTab] = useState<'bookshelf' | 'updates' | 'quotes'>('bookshelf');
+  // Main tab: 'bookshelf' | 'updates' | 'quotes' | 'saved'
+  const [mainTab, setMainTab] = useState<'bookshelf' | 'updates' | 'quotes' | 'saved'>('bookshelf');
   
   // Bookshelf sub-tab
   const [bookshelfSubTab, setBookshelfSubTab] = useState<'reading' | 'want_to_read' | 'read' | 'shelves' | 'stats'>('reading');
@@ -159,6 +160,7 @@ export const Profile: React.FC = () => {
   const wantToReadBooks = books.filter((b) => userProgress.some((p) => p.bookId === b.id && p.status === 'WANT_TO_READ'));
   const userPosts = posts.filter(p => p.userId === targetUser.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const userQuotes = userPosts.filter(p => p.type === 'QUOTE');
+  const savedPosts = posts.filter(p => savedPostIds.includes(p.id));
 
   // Stats
   const completionPercentage = computePercent(completedBooks.length, userGoal.targetBooks);
@@ -422,10 +424,13 @@ export const Profile: React.FC = () => {
         {/* Tab header */}
         <div className="flex border-b border-border-light-gray">
           {([
-            { id: 'bookshelf', label: 'Bookshelf', icon: <BookMarked size={14} /> },
-            { id: 'updates', label: 'Updates', icon: <BarChart2 size={14} /> },
-            { id: 'quotes', label: 'Quotes', icon: <Quote size={14} /> },
-          ] as const).map(tab => (
+            { id: 'bookshelf' as const, label: 'Bookshelf', icon: <BookMarked size={14} /> },
+            { id: 'updates' as const, label: 'Updates', icon: <BarChart2 size={14} /> },
+            { id: 'quotes' as const, label: 'Quotes', icon: <Quote size={14} /> },
+            ...(isOwnProfile
+              ? [{ id: 'saved' as const, label: translations[language].saved, icon: <Bookmark size={14} /> }]
+              : []),
+          ]).map(tab => (
             <button
               key={tab.id}
               onClick={() => setMainTab(tab.id)}
@@ -740,19 +745,21 @@ export const Profile: React.FC = () => {
           </div>
         )}
 
-        {/* ========== TAB: UPDATES & QUOTES ========== */}
-        {(mainTab === 'updates' || mainTab === 'quotes') && (
+        {/* ========== TAB: UPDATES, QUOTES & SAVED ========== */}
+        {(mainTab === 'updates' || mainTab === 'quotes' || mainTab === 'saved') && (
           <ProfileActivityTabs
             mainTab={mainTab}
             language={language}
             currentUser={currentUser}
             userPosts={userPosts}
             userQuotes={userQuotes}
+            savedPosts={savedPosts}
             activeCommentPostId={activeCommentPostId}
             profileCommentText={profileCommentText}
             setActiveCommentPostId={setActiveCommentPostId}
             setProfileCommentText={setProfileCommentText}
             likePost={likePost}
+            toggleSavePost={toggleSavePost}
             addComment={addComment}
             setDeleteConfirmPostId={setDeleteConfirmPostId}
           />
