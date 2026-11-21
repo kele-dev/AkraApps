@@ -9,6 +9,7 @@ import { canDeletePost, filterOwnedRecordsForSync, FIRESTORE_QUERY_LIMITS } from
 import { computeProgressTransition } from '../lib/progressUtils';
 import { safeStorageGet, safeStorageRemove, safeStorageSet } from '../lib/storage';
 import { clampGoalTarget, createUniqueId } from '../lib/idAndMath';
+import { logger } from '../lib/logger';
 
 // Helper to recursively clean undefined values for Firestore
 const cleanUndefined = <T,>(obj: T): T => {
@@ -475,7 +476,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       setPosts(postsList.length > 0 ? postsList : INITIAL_POSTS(userId, finalUser.displayName, finalUser.avatar));
     } catch (e) {
-      console.warn("Gagal sinkronisasi data masuk dari Firestore, beralih ke LocalStorage:", e);
+      logger.warn('firestore.inbound_sync_fallback', { error: e });
       const prefix = `akra_${userId}_`;
       setBooks(safeStorageGet<Book[]>(`${prefix}books`, []));
       setReadingProgress(safeStorageGet<ReadingProgress[]>(`${prefix}progress`, []));
@@ -517,7 +518,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await batch.commit();
       }
     } catch (e) {
-      console.error("Gagal sinkronisasi data keluar ke Firestore:", e);
+      logger.error('firestore.outbound_sync_failed', { error: e });
     }
   };
 
@@ -545,7 +546,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActionError(null);
         await signInWithGoogleReal();
       } catch (err) {
-        console.error("Gagal Login Google riil:", err);
+        logger.error('auth.google_signin_failed', { error: err });
         setActionError('Gagal masuk dengan Google. Silakan coba lagi.');
         throw err;
       }
@@ -565,7 +566,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         await signOut(auth);
       } catch (err) {
-        console.error("Gagal Logout riil:", err);
+        logger.error('auth.google_signout_failed', { error: err });
         setActionError('Gagal keluar dari akun. Silakan coba lagi.');
       }
     }
@@ -662,7 +663,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         await deleteDoc(doc(db, 'posts', postId));
       } catch (e) {
-        console.error("Gagal menghapus postingan dari Firestore:", e);
+        logger.error('firestore.delete_post_failed', { error: e, postId });
         setActionError('Gagal menghapus postingan dari server.');
       }
     }
@@ -892,7 +893,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         await setDoc(doc(firestoreDb, 'users', currentUser.id), toFirestoreData(updatedUser));
       } catch (e) {
-        console.error("Gagal menyimpan profil ke Firestore:", e);
+        logger.error('firestore.save_profile_failed', { error: e });
         setActionError('Gagal menyimpan perubahan profil ke server.');
       }
     }

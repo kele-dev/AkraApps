@@ -8,6 +8,7 @@ import { BookCover } from '../../components/Media';
 import { Plus, CheckCircle, Clock, ListPlus } from 'lucide-react';
 import { searchBooksHybrid, type SearchBookResult } from '../../lib/bookApi';
 import { filterLocalBooks } from '../../lib/bookSearchUtils';
+import { logger } from '../../lib/logger';
 import type { Book } from '../../types';
 
 export const LOCAL_BOOK_DATABASE: Book[] = [];
@@ -73,7 +74,7 @@ export const Books: React.FC = () => {
         triggerLocalFallback(language === 'id' ? "Buku tidak ditemukan. Menampilkan hasil pencarian dari database lokal." : "Book not found. Displaying search results from local database.", queryToUse);
       }
     } catch (e) {
-      console.warn("Pencarian API gagal, beralih ke lokal:", e);
+      logger.warn('books.api_search_fallback', { error: e });
       triggerLocalFallback(language === 'id' ? "Pencarian gagal / Offline. Menampilkan hasil pencarian dari database lokal." : "Search failed / Offline. Displaying search results from local database.", queryToUse);
     } finally {
       setIsSearching(false);

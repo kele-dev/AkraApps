@@ -9,6 +9,7 @@ import { BookCover, UserAvatar } from '../../components/Media';
 import { BuddyReadSection } from './BuddyReadSection';
 import { fetchWithTimeout } from '../../lib/http';
 import { resolveUserBookRating } from '../../lib/bookRating';
+import { logger } from '../../lib/logger';
 
 export const BookDetails: React.FC = () => {
   const { 
@@ -89,7 +90,7 @@ export const BookDetails: React.FC = () => {
             }
           } catch (err) {
             if ((err as { name?: string })?.name !== 'AbortError') {
-              console.warn("Failed to lookup local book online:", err);
+              logger.warn('openlibrary.search_lookup_failed', { error: err });
             }
           }
         }
@@ -132,20 +133,20 @@ export const BookDetails: React.FC = () => {
           const [ratingsRes, editionsRes, authorRes] = await Promise.all([
             fetchWithTimeout(`https://openlibrary.org${workId}/ratings.json`, { signal: controller.signal }).catch((err) => {
               if ((err as { name?: string })?.name !== 'AbortError') {
-                console.warn("Failed to fetch ratings from Open Library API:", err);
+                logger.warn('openlibrary.ratings_fetch_failed', { error: err });
               }
               return null;
             }),
             fetchWithTimeout(`https://openlibrary.org${workId}/editions.json?limit=10`, { signal: controller.signal }).catch((err) => {
               if ((err as { name?: string })?.name !== 'AbortError') {
-                console.warn("Failed to fetch edition details:", err);
+                logger.warn('openlibrary.editions_fetch_failed', { error: err });
               }
               return null;
             }),
             authorKey
               ? fetchWithTimeout(`https://openlibrary.org${authorKey}.json`, { signal: controller.signal }).catch((err) => {
                   if ((err as { name?: string })?.name !== 'AbortError') {
-                    console.warn("Failed to fetch author details:", err);
+                    logger.warn('openlibrary.author_fetch_failed', { error: err });
                   }
                   return null;
                 })
@@ -236,7 +237,7 @@ export const BookDetails: React.FC = () => {
         }
       } catch (err) {
         if ((err as { name?: string })?.name !== 'AbortError') {
-          console.error("Gagal sinkronisasi data dari Open Library API:", err);
+          logger.error('openlibrary.sync_failed', { error: err });
         }
         const fallbackDetails = getRichBookDetail(selectedBook);
         if (active) {
@@ -322,14 +323,14 @@ export const BookDetails: React.FC = () => {
           url: shareUrl,
         });
       } catch (err) {
-        console.warn('Share cancelled or failed:', err);
+        logger.warn('book.share_failed', { error: err });
       }
     } else if (navigator.clipboard?.writeText) {
       try {
         await navigator.clipboard.writeText(shareUrl);
         showToast(language === 'id' ? 'Tautan buku disalin ke papan klip!' : 'Book link copied to clipboard!', 'success');
       } catch (err) {
-        console.warn('Clipboard write failed:', err);
+        logger.warn('book.clipboard_write_failed', { error: err });
         showToast(language === 'id' ? 'Gagal menyalin tautan.' : 'Failed to copy link.', 'error');
       }
     }

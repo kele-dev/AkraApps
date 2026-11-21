@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { logger } from '../lib/logger';
 
 export default function AppError({
   error,
@@ -10,7 +11,7 @@ export default function AppError({
   unstable_retry: () => void;
 }) {
   useEffect(() => {
-    console.error('Unhandled route error:', error);
+    logger.error('route.unhandled_error', { error, digest: error.digest });
   }, [error]);
 
   return (

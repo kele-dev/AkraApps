@@ -8,6 +8,7 @@ import { AnimatedBook } from './AnimatedBook';
 import { BookCover, UserAvatar } from './Media';
 import { searchBooksHybrid, type SearchBookResult } from '../lib/bookApi';
 import { formatRelativeTime } from '../lib/dateUtils';
+import { logger } from '../lib/logger';
 
 export const Header: React.FC = () => {
   const { 
@@ -97,7 +98,7 @@ export const Header: React.FC = () => {
         setOnlineSuggestions(filteredResults);
       } catch (err) {
         if ((err as { name?: string })?.name !== 'AbortError') {
-          console.warn("Gagal mengambil saran pencarian online:", err);
+          logger.warn('header.online_search_failed', { error: err });
         }
       } finally {
         if (!controller.signal.aborted) {

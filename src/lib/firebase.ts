@@ -2,6 +2,7 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { resolveFirebaseMode } from './firebaseConfig';
+import { logger } from './logger';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -24,7 +25,7 @@ const mode = resolveFirebaseMode({
 });
 
 if (mode.hasFirebaseConfig && mode.missingKeys.length > 0) {
-  console.warn(`Firebase configuration incomplete; missing keys: ${mode.missingKeys.join(', ')}`);
+  logger.warn('firebase.config_partial', { missingKeys: mode.missingKeys });
 }
 
 let app;
@@ -43,14 +44,14 @@ if (mode.hasFirebaseConfig) {
     isDemoMode = false;
     firebaseConfigError = null;
   } catch (error) {
-    console.error("Gagal menginisialisasi Firebase SDK asli:", error);
+    logger.error('firebase.init_failed', { error });
     isDemoMode = false;
     firebaseConfigError = 'Firebase SDK initialization failed.';
   }
 } else if (isDemoMode) {
-  console.log("AKRA berjalan dalam Mode Demo lokal (NEXT_PUBLIC_ENABLE_DEMO_MODE=true).");
+  logger.info('firebase.demo_mode_active');
 } else if (firebaseConfigError) {
-  console.warn(firebaseConfigError);
+  logger.warn('firebase.config_missing', { reason: firebaseConfigError });
 }
 
 // Interface for Mock User

@@ -7,6 +7,7 @@ import { LOCAL_BOOK_DATABASE } from '../Books/Books';
 import { Book } from '../../types';
 import { searchBooksHybrid, type SearchBookResult } from '../../lib/bookApi';
 import { filterLocalBooks } from '../../lib/bookSearchUtils';
+import { logger } from '../../lib/logger';
 import { BookCover, UserAvatar } from '../../components/Media';
 
 export const SearchPage: React.FC = () => {
@@ -88,7 +89,7 @@ export const SearchPage: React.FC = () => {
         triggerLocalFallback(queryToUse, startTime);
       }
     } catch (e) {
-      console.warn("Pencarian API gagal di Halaman Search, beralih ke lokal:", e);
+      logger.warn('search.api_fallback', { error: e });
       triggerLocalFallback(queryToUse, startTime, "Pencarian API gagal (offline). Menampilkan hasil database lokal.");
     } finally {
       setIsSearching(false);

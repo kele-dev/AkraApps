@@ -1,4 +1,5 @@
 import { fetchWithTimeout } from './http';
+import { logger } from './logger';
 import {
   deduplicateBookResults,
   normalizeGoogleBooksItems,
@@ -39,7 +40,7 @@ export const searchBooksHybrid = async (
       }
     } catch (e) {
       if ((e as { name?: string })?.name !== 'AbortError') {
-        console.warn('Google Books API query failed:', e);
+        logger.warn('book_api.google_query_failed', { error: e });
       }
     }
     return [];
@@ -59,7 +60,7 @@ export const searchBooksHybrid = async (
       }
     } catch (e) {
       if ((e as { name?: string })?.name !== 'AbortError') {
-        console.warn('Open Library API query failed:', e);
+        logger.warn('book_api.open_library_query_failed', { error: e });
       }
     }
     return [];

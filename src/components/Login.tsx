@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext';
 import { BookOpen } from 'lucide-react';
 import { AnimatedBook } from './AnimatedBook';
 import { isDemoMode, firebaseConfigError } from '../lib/firebase';
+import { logger } from '../lib/logger';
 
 export const Login: React.FC = () => {
   const { loginWithGoogle, language } = useApp();
@@ -17,7 +18,7 @@ export const Login: React.FC = () => {
     try {
       await loginWithGoogle();
     } catch (error) {
-      console.error("Login failed:", error);
+      logger.error('auth.login_failed', { error });
       const message =
         error instanceof Error && error.message
           ? error.message
