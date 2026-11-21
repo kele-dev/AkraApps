@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit --incremental false",
-    "test": "node --experimental-strip-types --test tests"
+    "test": "node --experimental-strip-types --test \"tests/*.test.ts\""
   },
   "dependencies": {
     "firebase": "^12.15.0",
