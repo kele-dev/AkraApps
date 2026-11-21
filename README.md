@@ -51,3 +51,8 @@ Open [http://localhost:3000](http://localhost:3000).
 - `src/features/` — Feature modules (`Feed`, `Books`, `Profile`, `Search`)
 - `src/lib/` — Firebase config, book API client, storage, validation, and utilities
 - `firestore.rules` — Reference Cloud Firestore security rules
+- `docs/OPERATIONS.md` — Deployment, health checks, Firestore backup/restore, and rollback runbook
+
+## Operations
+
+See [docs/OPERATIONS.md](docs/OPERATIONS.md) for Firebase security rules deployment, `/api/health` monitoring, Firestore export/import, and rollback procedures.
