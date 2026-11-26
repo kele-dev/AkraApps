@@ -39,8 +39,8 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
       {showText && (
         <div className="flex justify-between mb-2 text-xs">
           <span className="text-text-slate-medium font-medium">
-            {language === 'id' 
-              ? `${value} dari ${max} halaman` 
+            {language === 'id'
+              ? `${value} dari ${max} halaman`
               : `${value} of ${max} pages`}
           </span>
           <span className={`${selectedColor.text} font-bold`}>
