@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp, translations } from '../../context/AppContext';
 import { Search, Star, ChevronDown, Check, Users, BookOpen, Quote, HelpCircle } from 'lucide-react';
-import { LOCAL_BOOK_DATABASE } from '../Books/Books';
 import { Book } from '../../types';
 import { searchBooksHybrid } from '../../lib/bookApi';
 
@@ -83,29 +82,21 @@ export const SearchPage: React.FC = () => {
         setSearchResults(results);
         setTotalResults(results.length);
       } else {
-        triggerLocalFallback(queryToUse, startTime);
+        showSearchFallback(startTime, "Buku tidak ditemukan.");
       }
     } catch (e) {
-      console.warn("Pencarian API gagal di Halaman Search, beralih ke lokal:", e);
-      triggerLocalFallback(queryToUse, startTime, "Pencarian API gagal (offline). Menampilkan hasil database lokal.");
+      console.warn("Pencarian API gagal di Halaman Search:", e);
+      showSearchFallback(startTime, "Pencarian API gagal (offline).");
     } finally {
       setIsSearching(false);
     }
   };
 
-  const triggerLocalFallback = (queryText: string, startTime: number, warningMsg = '') => {
-    setSearchWarning(warningMsg || "Buku tidak ditemukan. Menampilkan hasil database lokal.");
-    const q = queryText.toLowerCase();
-    
-    // Filter database
-    const filtered = LOCAL_BOOK_DATABASE.filter(
-      (b) => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q)
-    );
-
-    setSearchResults(filtered);
-    setTotalResults(filtered.length);
-    const endTime = performance.now();
-    setSearchTime(parseFloat(((endTime - startTime) / 1000).toFixed(2)));
+  const showSearchFallback = (startTime: number, warningMsg: string) => {
+    setSearchWarning(warningMsg);
+    setSearchResults([]);
+    setTotalResults(0);
+    setSearchTime(parseFloat(((performance.now() - startTime) / 1000).toFixed(2)));
   };
 
   // Find if a book is in user's library and return status

@@ -1,10 +1,10 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import type { User, Book, ReadingProgress, Post, ReadingGoal, Comment, Story, Shelf, BuddyRead, BuddyMessage, Notification } from '../types';
 import { auth, db, isDemoMode, simulateGoogleSignIn, signInWithGoogleReal } from '../lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, doc, setDoc, getDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, query, orderBy, limit, deleteDoc } from 'firebase/firestore';
 
 // Helper to recursively clean undefined values for Firestore
 const cleanUndefined = (obj: any): any => {
@@ -24,6 +24,44 @@ const cleanUndefined = (obj: any): any => {
     }
   });
   return newObj;
+};
+
+// The four Firestore collections this app mirrors, and the state slices they come from.
+type SyncableState = {
+  books: Book[];
+  readingProgress: ReadingProgress[];
+  goals: ReadingGoal[];
+  posts: Post[];
+};
+
+// Doc id -> normalized payload, per collection name. Everything already stored
+// remotely, so the persist effect only writes what actually differs.
+type FirestoreSyncSnapshot = Record<string, Map<string, string>>;
+
+type SyncableDoc = Book | ReadingProgress | ReadingGoal | Post;
+
+// The feed is the only collection that grows without bound, so it is read
+// newest-first and capped. users/books/progress/goals stay complete: the feed,
+// book-details counts and profile browsing aggregate over every member.
+const FEED_POST_LIMIT = 200;
+
+const buildSyncDocs = (
+  state: SyncableState
+): Record<string, Array<{ id: string; data: SyncableDoc }>> => ({
+  books: state.books.map((b) => ({ id: b.id, data: b })),
+  progress: state.readingProgress.map((p) => ({ id: p.id, data: p })),
+  goals: state.goals.map((g) => ({ id: `${g.userId}_${g.year}`, data: g })),
+  posts: state.posts.map((p) => ({ id: p.id, data: p })),
+});
+
+const buildSyncHashes = (state: SyncableState): FirestoreSyncSnapshot => {
+  const hashes: FirestoreSyncSnapshot = {};
+  for (const [collectionName, docs] of Object.entries(buildSyncDocs(state))) {
+    const map = new Map<string, string>();
+    for (const d of docs) map.set(d.id, JSON.stringify(cleanUndefined(d.data)));
+    hashes[collectionName] = map;
+  }
+  return hashes;
 };
 
 interface AppContextProps {
@@ -89,30 +127,9 @@ const GUEST_USER: User = {
   bio: 'Silakan masuk dengan Google untuk menyimpan data membaca.'
 };
 
-// INITIAL MOCK DATA
-const INITIAL_USERS: User[] = [];
-const INITIAL_BOOKS: Book[] = [];
-const INITIAL_PROGRESS = (userId: string): ReadingProgress[] => [];
-const INITIAL_POSTS = (userId: string, userDisplayName: string, userAvatar: string): Post[] => [];
-const INITIAL_STORIES = (userId: string): Story[] => [];
-const INITIAL_GOALS = (userId: string): ReadingGoal[] => [];
-const INITIAL_BUDDY_READS = (userId: string): BuddyRead[] => [];
-const INITIAL_NOTIFICATIONS = (currentUserId: string): Notification[] => [];
-const getInitialBuddyMessages = (currentUserId: string, currentUserDisplayName: string, currentUserAvatar: string): BuddyMessage[] => [];
-
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Merge localStorage users with INITIAL_USERS to include new social fields
-  const mergedInitialUsers = INITIAL_USERS.map(initialUser => {
-    const stored = typeof window !== 'undefined' 
-      ? localStorage.getItem(`akra_user_${initialUser.id}`) 
-      : null;
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return { ...initialUser, ...parsed }; // INITIAL_USERS provides new fields as defaults
-    }
-    return initialUser;
-  });
-  const [users, setUsers] = useState<User[]>(mergedInitialUsers);
+  // Members arrive from Firestore on sign-in; there are no built-in accounts.
+  const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User>(GUEST_USER);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -148,7 +165,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Core App states
-  const [books, setBooks] = useState<Book[]>(INITIAL_BOOKS);
+  const [books, setBooks] = useState<Book[]>([]);
   const [readingProgress, setReadingProgress] = useState<ReadingProgress[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [goals, setGoals] = useState<ReadingGoal[]>([]);
@@ -159,17 +176,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [buddyMessages, setBuddyMessages] = useState<BuddyMessage[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
+  // Baseline of the last payload written per Firestore doc, scoped to the user
+  // it was read for. Reset whenever the signed-in user changes.
+  const firestoreSyncRef = useRef<{ userId: string; docs: FirestoreSyncSnapshot }>({
+    userId: '',
+    docs: {},
+  });
+
   // 1. Listen to Real Firebase Auth (if not demo mode)
   useEffect(() => {
     if (isDemoMode) {
       // Load user session from LocalStorage
       const savedUser = localStorage.getItem('akra_current_user');
       if (savedUser) {
-        const parsed = JSON.parse(savedUser);
-        // Merge with INITIAL_USERS to populate any new fields (like social fields)
-        const initialMatch = INITIAL_USERS.find(u => u.id === parsed.id);
-        const mergedUser = initialMatch ? { ...initialMatch, ...parsed } : parsed;
-        setCurrentUser(mergedUser);
+        setCurrentUser(JSON.parse(savedUser));
         setIsLoggedIn(true);
       }
       setIsLoaded(true);
@@ -207,90 +227,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (isDemoMode) {
       const prefix = `akra_${currentUser.id}_`;
-      const savedBooks = localStorage.getItem(`${prefix}books`);
-      const savedProgress = localStorage.getItem(`${prefix}progress`);
-      const savedPosts = localStorage.getItem(`${prefix}posts`);
-      const savedGoals = localStorage.getItem(`${prefix}goals`);
+      // Mirrors the keys written by the persist effect below, so a demo session
+      // reloads exactly what it saved.
+      const readStored = <T,>(key: string): T[] => {
+        const stored = localStorage.getItem(`${prefix}${key}`);
+        return stored ? (JSON.parse(stored) as T[]) : [];
+      };
 
-      if (savedBooks) {
-        setBooks(JSON.parse(savedBooks));
-      } else {
-        setBooks(INITIAL_BOOKS);
-      }
-
-      if (savedProgress) {
-        const parsed = JSON.parse(savedProgress);
-        const filtered = parsed.filter((p: ReadingProgress) => !p.userId.startsWith('user_'));
-        setReadingProgress(filtered);
-      } else {
-        setReadingProgress(INITIAL_PROGRESS(currentUser.id));
-      }
-
-      if (savedPosts) {
-        const parsed = JSON.parse(savedPosts);
-        const filtered = parsed.filter((p: Post) => {
-          return !(p.userId.startsWith('user_') || 
-                   ['Rachel Amanda', 'Dimas Aditya', 'Aditya Wibowo', 'Siti Rahma', 'Budi Santoso'].includes(p.userDisplayName) ||
-                   p.content.includes("Kita tidak bisa mengendalikan hal eksternal") ||
-                   p.content.includes("fiksi bersama"));
-        });
-        setPosts(filtered);
-      } else {
-        setPosts(INITIAL_POSTS(currentUser.id, currentUser.displayName, currentUser.avatar));
-      }
-
-      if (savedGoals) {
-        const parsed = JSON.parse(savedGoals);
-        const filtered = parsed.filter((g: ReadingGoal) => !g.userId.startsWith('user_'));
-        setGoals(filtered);
-      } else {
-        setGoals(INITIAL_GOALS(currentUser.id));
-      }
-
-      const savedStories = localStorage.getItem(`${prefix}stories`);
-      const savedBookmarks = localStorage.getItem(`${prefix}saved_bookmarks`);
-
-      if (savedStories) {
-        const parsed = JSON.parse(savedStories);
-        const filtered = parsed.filter((s: Story) => !s.userId.startsWith('user_'));
-        setStories(filtered);
-      } else {
-        setStories(INITIAL_STORIES(currentUser.id));
-      }
-
-      if (savedBookmarks) {
-        setSavedPostIds(JSON.parse(savedBookmarks));
-      } else {
-        setSavedPostIds([]);
-      }
-
-      const savedShelves = localStorage.getItem(`${prefix}shelves`);
-      if (savedShelves) {
-        setShelves(JSON.parse(savedShelves));
-      } else {
-        setShelves([]);
-      }
-
-      const savedBuddyReads = localStorage.getItem(`${prefix}buddy_reads`);
-      if (savedBuddyReads) {
-        setBuddyReads(JSON.parse(savedBuddyReads));
-      } else {
-        setBuddyReads(INITIAL_BUDDY_READS(currentUser.id));
-      }
-
-      const savedBuddyMessages = localStorage.getItem(`${prefix}buddy_messages`);
-      if (savedBuddyMessages) {
-        setBuddyMessages(JSON.parse(savedBuddyMessages));
-      } else {
-        setBuddyMessages(getInitialBuddyMessages(currentUser.id, currentUser.displayName, currentUser.avatar));
-      }
-
-      const savedNotifications = localStorage.getItem(`${prefix}notifications`);
-      if (savedNotifications) {
-        setNotifications(JSON.parse(savedNotifications));
-      } else {
-        setNotifications(INITIAL_NOTIFICATIONS(currentUser.id));
-      }
+      setBooks(readStored<Book>('books'));
+      setReadingProgress(readStored<ReadingProgress>('progress'));
+      setPosts(readStored<Post>('posts'));
+      setGoals(readStored<ReadingGoal>('goals'));
+      setStories(readStored<Story>('stories'));
+      setSavedPostIds(readStored<string>('saved_bookmarks'));
+      setShelves(readStored<Shelf>('shelves'));
+      setBuddyReads(readStored<BuddyRead>('buddy_reads'));
+      setBuddyMessages(readStored<BuddyMessage>('buddy_messages'));
+      setNotifications(readStored<Notification>('notifications'));
     }
   }, [currentUser, isLoaded]);
 
@@ -311,7 +264,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`${prefix}notifications`, JSON.stringify(notifications));
 
     if (!isDemoMode) {
-      syncDataToFirestore();
+      syncDataToFirestore({ books, readingProgress, goals, posts });
     }
   }, [books, readingProgress, posts, goals, stories, savedPostIds, shelves, buddyReads, buddyMessages, notifications, currentUser, isLoaded]);
 
@@ -332,83 +285,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       setIsLoggedIn(true);
 
-      // Query Books
-      const booksQuery = query(collection(db, 'books'));
-      const booksSnap = await getDocs(booksQuery);
-      const booksList: Book[] = [];
-      booksSnap.forEach((docSnap) => {
-        booksList.push(docSnap.data() as Book);
-      });
-      setBooks(booksList.length > 0 ? booksList : INITIAL_BOOKS);
+      // Shared, cross-member collections: the feed, the book catalog, the
+      // book-details social counts and profile browsing all read other members'
+      // documents, so they cannot be narrowed by userId. Read them together
+      // instead of one round trip at a time, and cap the feed.
+      const [booksSnap, usersSnap, progressSnap, goalsSnap, postsSnap] = await Promise.all([
+        getDocs(collection(db, 'books')),
+        getDocs(collection(db, 'users')),
+        getDocs(collection(db, 'progress')),
+        getDocs(collection(db, 'goals')),
+        getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(FEED_POST_LIMIT))),
+      ]);
 
-      // 2. Query Users (all registered members) to populate the social network feed
-      const usersQuery = query(collection(db, 'users'));
-      const usersSnap = await getDocs(usersQuery);
-      const usersList: User[] = [];
-      usersSnap.forEach((docSnap) => {
-        const u = docSnap.data() as User;
-        if (u.id.startsWith('user_') || ['Rachel Amanda', 'Dimas Aditya', 'Aditya Wibowo', 'Siti Rahma', 'Budi Santoso'].includes(u.displayName)) {
-          deleteDoc(doc(db, 'users', docSnap.id)).catch(err => console.warn("Failed to delete mock user:", err));
-        } else {
-          usersList.push(u);
-        }
-      });
-      
-      // Merge with initial users to ensure default demo accounts exist if not in Firestore
-      const existingUserIds = new Set(usersList.map(u => u.id));
-      const mergedUsers = [...usersList];
-      for (const u of INITIAL_USERS) {
-        if (!existingUserIds.has(u.id)) {
-          mergedUsers.push(u);
-        }
-      }
-      setUsers(mergedUsers);
+      const booksList = booksSnap.docs.map((snap) => snap.data() as Book);
+      const usersList = usersSnap.docs.map((snap) => snap.data() as User);
+      const progressList = progressSnap.docs.map((snap) => snap.data() as ReadingProgress);
+      const goalsList = goalsSnap.docs.map((snap) => snap.data() as ReadingGoal);
+      const postsList = postsSnap.docs.map((snap) => snap.data() as Post);
 
-      // Query Progress
-      const progressQuery = query(collection(db, 'progress'));
-      const progressSnap = await getDocs(progressQuery);
-      const progressList: ReadingProgress[] = [];
-      progressSnap.forEach((docSnap) => {
-        const p = docSnap.data() as ReadingProgress;
-        if (p.userId.startsWith('user_')) {
-          deleteDoc(doc(db, 'progress', docSnap.id)).catch(err => console.warn(err));
-        } else {
-          progressList.push(p);
-        }
-      });
-      setReadingProgress(progressList.length > 0 ? progressList : INITIAL_PROGRESS(userId));
+      setBooks(booksList);
+      setUsers(usersList);
+      setReadingProgress(progressList);
+      setGoals(goalsList);
+      setPosts(postsList);
 
-      // Query Goals
-      const goalsQuery = query(collection(db, 'goals'));
-      const goalsSnap = await getDocs(goalsQuery);
-      const goalsList: ReadingGoal[] = [];
-      goalsSnap.forEach((docSnap) => {
-        const g = docSnap.data() as ReadingGoal;
-        if (g.userId.startsWith('user_')) {
-          deleteDoc(doc(db, 'goals', docSnap.id)).catch(err => console.warn(err));
-        } else {
-          goalsList.push(g);
-        }
-      });
-      setGoals(goalsList.length > 0 ? goalsList : INITIAL_GOALS(userId));
-
-      // Query Posts
-      const postsQuery = query(collection(db, 'posts'));
-      const postsSnap = await getDocs(postsQuery);
-      const postsList: Post[] = [];
-      postsSnap.forEach((docSnap) => {
-        const p = docSnap.data() as Post;
-        const isMock = p.userId.startsWith('user_') || 
-                       ['Rachel Amanda', 'Dimas Aditya', 'Aditya Wibowo', 'Siti Rahma', 'Budi Santoso'].includes(p.userDisplayName) ||
-                       p.content.includes("Kita tidak bisa mengendalikan hal eksternal") ||
-                       p.content.includes("fiksi bersama");
-        if (isMock) {
-          deleteDoc(doc(db, 'posts', docSnap.id)).catch(err => console.warn("Failed to delete mock post:", err));
-        } else {
-          postsList.push(p);
-        }
-      });
-      setPosts(postsList.length > 0 ? postsList : INITIAL_POSTS(userId, finalUser.displayName, finalUser.avatar));
+      // Everything above is already stored remotely: record it as the sync
+      // baseline so the persist effect does not echo the whole collection back.
+      firestoreSyncRef.current = {
+        userId,
+        docs: buildSyncHashes({
+          books: booksList,
+          readingProgress: progressList,
+          goals: goalsList,
+          posts: postsList,
+        }),
+      };
     } catch (e) {
       console.warn("Gagal sinkronisasi data masuk dari Firestore, beralih ke LocalStorage:", e);
       const prefix = `akra_${userId}_`;
@@ -436,25 +347,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Sync to Firestore
-  const syncDataToFirestore = async () => {
+  // Sync to Firestore — writes only the docs whose payload changed since the
+  // last sync. Unrelated state changes (likes, language, stories, ...) become
+  // no-ops instead of rewriting every collection.
+  const syncDataToFirestore = async (state: SyncableState) => {
     if (isDemoMode || currentUser.id === 'guest') return;
+
+    // A different account owns a different baseline.
+    if (firestoreSyncRef.current.userId !== currentUser.id) {
+      firestoreSyncRef.current = { userId: currentUser.id, docs: {} };
+    }
+    const synced = firestoreSyncRef.current.docs;
+
     try {
-      // Sync Books
-      for (const book of books) {
-        await setDoc(doc(db, 'books', book.id), cleanUndefined(book));
-      }
-      // Sync Progress
-      for (const p of readingProgress) {
-        await setDoc(doc(db, 'progress', p.id), cleanUndefined(p));
-      }
-      // Sync Goals
-      for (const g of goals) {
-        await setDoc(doc(db, 'goals', `${g.userId}_${g.year}`), cleanUndefined(g));
-      }
-      // Sync Posts
-      for (const post of posts) {
-        await setDoc(doc(db, 'posts', post.id), cleanUndefined(post));
+      for (const [collectionName, docs] of Object.entries(buildSyncDocs(state))) {
+        const previous = synced[collectionName] ?? new Map<string, string>();
+        const next = new Map<string, string>();
+        const changedIds: string[] = [];
+        const writes: Array<Promise<unknown>> = [];
+
+        for (const d of docs) {
+          const payload = cleanUndefined(d.data);
+          const hash = JSON.stringify(payload);
+          next.set(d.id, hash);
+          if (previous.get(d.id) !== hash) {
+            changedIds.push(d.id);
+            writes.push(setDoc(doc(db, collectionName, d.id), payload));
+          }
+        }
+
+        // Record the new baseline before awaiting, so overlapping state changes
+        // do not schedule the same document twice.
+        synced[collectionName] = next;
+        if (writes.length === 0) continue;
+
+        try {
+          await Promise.all(writes);
+        } catch (writeError) {
+          // Forget the failed docs so the next state change retries them.
+          for (const id of changedIds) next.delete(id);
+          throw writeError;
+        }
       }
     } catch (e) {
       console.error("Gagal sinkronisasi data keluar ke Firestore:", e);

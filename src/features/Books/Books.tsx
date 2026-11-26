@@ -7,8 +7,6 @@ import { ProgressBar } from '../../components/ProgressBar';
 import { Plus, CheckCircle, Clock, ListPlus } from 'lucide-react';
 import { searchBooksHybrid } from '../../lib/bookApi';
 
-export const LOCAL_BOOK_DATABASE: any[] = [];
-
 export const Books: React.FC = () => {
   const { 
     books, 
@@ -50,13 +48,10 @@ export const Books: React.FC = () => {
     return readingProgress.find((p) => p.userId === currentUser.id && p.bookId === bookId);
   };
 
-  const triggerLocalFallback = (warningMsg: string, queryToUse?: string) => {
+  // There is no local catalog to fall back to: report the state, keep results empty.
+  const showSearchFallback = (warningMsg: string) => {
     setSearchWarning(warningMsg);
-    const q = (typeof queryToUse === 'string' ? queryToUse : searchQuery).toLowerCase();
-    const filtered = LOCAL_BOOK_DATABASE.filter(
-      (b) => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q)
-    );
-    setSearchResults(filtered);
+    setSearchResults([]);
   };
 
   const handleApiSearch = async (overrideQuery?: string) => {
@@ -70,11 +65,11 @@ export const Books: React.FC = () => {
       if (results.length > 0) {
         setSearchResults(results);
       } else {
-        triggerLocalFallback(language === 'id' ? "Buku tidak ditemukan. Menampilkan hasil pencarian dari database lokal." : "Book not found. Displaying search results from local database.", queryToUse);
+        showSearchFallback(language === 'id' ? "Buku tidak ditemukan." : "Book not found.");
       }
     } catch (e) {
-      console.warn("Pencarian API gagal, beralih ke lokal:", e);
-      triggerLocalFallback(language === 'id' ? "Pencarian gagal / Offline. Menampilkan hasil pencarian dari database lokal." : "Search failed / Offline. Displaying search results from local database.", queryToUse);
+      console.warn("Pencarian API gagal:", e);
+      showSearchFallback(language === 'id' ? "Pencarian gagal / Offline." : "Search failed / Offline.");
     } finally {
       setIsSearching(false);
     }
