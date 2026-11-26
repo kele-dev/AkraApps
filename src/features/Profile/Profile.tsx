@@ -42,12 +42,18 @@ export const Profile: React.FC = () => {
     isFollowing,
     users,
     deletePost,
+    loadProgressForUser,
     language
   } = useApp();
 
   const targetUser = viewedUser || currentUser;
   const isOwnProfile = targetUser.id === currentUser.id;
   const following = isFollowing(targetUser.id);
+
+  // A browsed profile's bookshelf lives in its own scoped query.
+  useEffect(() => {
+    loadProgressForUser(targetUser.id);
+  }, [targetUser.id, loadProgressForUser]);
 
   // Profile edit states
   const [isEditing, setIsEditing] = useState(false);

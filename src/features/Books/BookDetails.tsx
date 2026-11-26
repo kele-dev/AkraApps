@@ -22,6 +22,7 @@ export const BookDetails: React.FC = () => {
     startBuddyRead,
     addBuddyMessage,
     viewBookDetails,
+    loadProgressForBooks,
     language
   } = useApp();
 
@@ -264,6 +265,19 @@ export const BookDetails: React.FC = () => {
   const progress = libraryBook ? readingProgress.find(p => p.userId === currentUser.id && p.bookId === libraryBook.id) : null;
   const currentShelf = progress ? progress.status : null; // 'WANT_TO_READ' | 'READING' | 'COMPLETED' | null
 
+  // Library copies of this title/author, so social counts cover all of them.
+  const allMatchingBookIds = richDetail
+    ? books
+        .filter(b => b.title.toLowerCase() === richDetail.title.toLowerCase() && b.author.toLowerCase() === richDetail.author.toLowerCase())
+        .map(b => b.id)
+    : [];
+  const matchingBookIdsKey = allMatchingBookIds.join(',');
+
+  // Rows for this book are fetched on demand instead of scanning the collection.
+  useEffect(() => {
+    if (matchingBookIdsKey) loadProgressForBooks(matchingBookIdsKey.split(','));
+  }, [matchingBookIdsKey, loadProgressForBooks]);
+
   // Sync inputPage with progress
   useEffect(() => {
     if (progress) {
@@ -285,9 +299,6 @@ export const BookDetails: React.FC = () => {
   }
 
   // Find all books in the database matching this title and author
-  const allMatchingBookIds = books
-    .filter(b => b.title.toLowerCase() === richDetail.title.toLowerCase() && b.author.toLowerCase() === richDetail.author.toLowerCase())
-    .map(b => b.id);
   const appProgressesForThisBook = readingProgress.filter(p => allMatchingBookIds.includes(p.bookId));
 
   const currentlyReadingCount = appProgressesForThisBook.filter(p => p.status === 'READING').length;

@@ -25,8 +25,14 @@ export const Feed: React.FC = () => {
     savedPostIds,
     toggleSavePost,
     deletePost,
+    loadRecentProgress,
     language
   } = useApp();
+
+  // Bounded, cross-user activity for the Bookmates widget.
+  useEffect(() => {
+    loadRecentProgress();
+  }, [loadRecentProgress]);
   
   // Post creator state
   const [postType, setPostType] = useState<'QUOTE' | 'THOUGHT' | 'PHOTO'>('QUOTE');

@@ -1,10 +1,10 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import type { User, Book, ReadingProgress, Post, ReadingGoal, Comment, Story, Shelf, BuddyRead, BuddyMessage, Notification } from '../types';
 import { auth, db, isDemoMode, simulateGoogleSignIn, signInWithGoogleReal } from '../lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, doc, setDoc, getDoc, getDocs, query, orderBy, limit, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, query, where, orderBy, limit, deleteDoc } from 'firebase/firestore';
 
 // Helper to recursively clean undefined values for Firestore
 const cleanUndefined = (obj: any): any => {
@@ -44,6 +44,10 @@ type SyncableDoc = Book | ReadingProgress | ReadingGoal | Post;
 // newest-first and capped. users/books/progress/goals stay complete: the feed,
 // book-details counts and profile browsing aggregate over every member.
 const FEED_POST_LIMIT = 200;
+
+// Cross-user "recent reading activity" is bounded by date and row count.
+const RECENT_PROGRESS_WINDOW_DAYS = 90;
+const RECENT_PROGRESS_LIMIT = 50;
 
 const buildSyncDocs = (
   state: SyncableState
@@ -88,6 +92,9 @@ interface AppContextProps {
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   updateProgress: (bookId: string, page: number, status: ReadingProgress['status'], rating?: number, note?: string) => void;
+  loadProgressForUser: (userId: string) => Promise<void>;
+  loadProgressForBooks: (bookIds: string[]) => Promise<void>;
+  loadRecentProgress: () => Promise<void>;
   addPost: (type: 'QUOTE' | 'THOUGHT' | 'PROGRESS_UPDATE' | 'PHOTO', content: string, bookId?: string, page?: number, rating?: number, imageUrl?: string) => void;
   deletePost: (postId: string) => void;
   likePost: (postId: string) => void;
@@ -183,6 +190,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     docs: {},
   });
 
+  // Progress rows already fetched, keyed by the scope that fetched them, so
+  // revisiting a profile or a book does not query again.
+  const progressScopesRef = useRef<Set<string>>(new Set());
+
   // 1. Listen to Real Firebase Auth (if not demo mode)
   useEffect(() => {
     if (isDemoMode) {
@@ -214,6 +225,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setReadingProgress([]);
         setPosts([]);
         setGoals([]);
+        progressScopesRef.current = new Set();
       }
       setIsLoaded(true);
     });
@@ -292,7 +304,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const [booksSnap, usersSnap, progressSnap, goalsSnap, postsSnap] = await Promise.all([
         getDocs(collection(db, 'books')),
         getDocs(collection(db, 'users')),
-        getDocs(collection(db, 'progress')),
+        // Only the signed-in member's rows; others load per user or per book.
+        getDocs(query(collection(db, 'progress'), where('userId', '==', userId))),
         getDocs(collection(db, 'goals')),
         getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(FEED_POST_LIMIT))),
       ]);
@@ -308,6 +321,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setReadingProgress(progressList);
       setGoals(goalsList);
       setPosts(postsList);
+
+      // Other members' rows are fetched on demand, so start from this scope.
+      progressScopesRef.current = new Set([`user:${userId}`]);
 
       // Everything above is already stored remotely: record it as the sync
       // baseline so the persist effect does not echo the whole collection back.
@@ -393,6 +409,69 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.error("Gagal sinkronisasi data keluar ke Firestore:", e);
     }
   };
+
+  // Progress is never read as a whole collection. Rows are fetched for the
+  // signed-in member, for the book being viewed, or for recent activity.
+  const mergeProgress = useCallback((rows: ReadingProgress[]) => {
+    if (rows.length === 0) return;
+    setReadingProgress((prev) => {
+      const byId = new Map(prev.map((row) => [row.id, row]));
+      for (const row of rows) byId.set(row.id, row);
+      return [...byId.values()];
+    });
+  }, []);
+
+  const loadProgressForUser = useCallback(async (targetUserId: string) => {
+    if (isDemoMode || currentUser.id === 'guest') return;
+    const key = `user:${targetUserId}`;
+    if (progressScopesRef.current.has(key)) return;
+    progressScopesRef.current.add(key);
+    try {
+      const snap = await getDocs(query(collection(db, 'progress'), where('userId', '==', targetUserId)));
+      mergeProgress(snap.docs.map((row) => row.data() as ReadingProgress));
+    } catch (e) {
+      progressScopesRef.current.delete(key);
+      console.warn("Gagal memuat progres pengguna:", e);
+    }
+  }, [currentUser.id, mergeProgress]);
+
+  const loadProgressForBooks = useCallback(async (bookIds: string[]) => {
+    if (isDemoMode || currentUser.id === 'guest' || bookIds.length === 0) return;
+    // Firestore caps `in` at 30 values; library copies of one title rarely exceed it.
+    const ids = bookIds.slice(0, 30);
+    const key = `books:${[...ids].sort().join(',')}`;
+    if (progressScopesRef.current.has(key)) return;
+    progressScopesRef.current.add(key);
+    try {
+      const snap = await getDocs(query(collection(db, 'progress'), where('bookId', 'in', ids)));
+      mergeProgress(snap.docs.map((row) => row.data() as ReadingProgress));
+    } catch (e) {
+      progressScopesRef.current.delete(key);
+      console.warn("Gagal memuat progres buku:", e);
+    }
+  }, [currentUser.id, mergeProgress]);
+
+  const loadRecentProgress = useCallback(async () => {
+    if (isDemoMode || currentUser.id === 'guest') return;
+    const key = 'recent';
+    if (progressScopesRef.current.has(key)) return;
+    progressScopesRef.current.add(key);
+    try {
+      const since = new Date(Date.now() - RECENT_PROGRESS_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      const snap = await getDocs(
+        query(
+          collection(db, 'progress'),
+          where('updatedAt', '>=', since),
+          orderBy('updatedAt', 'desc'),
+          limit(RECENT_PROGRESS_LIMIT),
+        ),
+      );
+      mergeProgress(snap.docs.map((row) => row.data() as ReadingProgress));
+    } catch (e) {
+      progressScopesRef.current.delete(key);
+      console.warn("Gagal memuat aktivitas baca terbaru:", e);
+    }
+  }, [currentUser.id, mergeProgress]);
 
   // Autentikasi Actions
   const loginWithGoogle = async () => {
@@ -829,6 +908,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loginWithGoogle,
         logout,
         updateProgress,
+        loadProgressForUser,
+        loadProgressForBooks,
+        loadRecentProgress,
         addPost,
         deletePost,
         likePost,
